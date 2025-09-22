@@ -6,20 +6,148 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const multer_1 = __importDefault(require("multer"));
 const cors_1 = __importDefault(require("cors"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const path_1 = __importDefault(require("path"));
 const fs_extra_1 = __importDefault(require("fs-extra"));
 const child_process_1 = require("child_process");
 const util_1 = require("util");
-const pdfPoppler = require('pdf-poppler');
+// @ts-ignore - pdf-poppler doesn't have TypeScript declarations
+const pdf_poppler_1 = __importDefault(require("pdf-poppler"));
 const sharp_1 = __importDefault(require("sharp"));
 const archiver_1 = __importDefault(require("archiver"));
 // Authentication imports
 const auth_1 = __importDefault(require("./routes/auth"));
+const fileRecords_1 = __importDefault(require("./routes/fileRecords"));
+const systemLogs_1 = __importDefault(require("./routes/systemLogs"));
+const contact_1 = __importDefault(require("./routes/contact"));
 const security_1 = require("./middleware/security");
 const auth_2 = require("./middleware/auth");
 const auth_3 = require("./lib/auth");
 const database_1 = __importDefault(require("./lib/database"));
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
+// Utility function to log system events
+async function logSystemEvent(params) {
+    try {
+        const { type, message, details, userId, userEmail, severity, req } = params;
+        // Get client info if request is provided
+        const ipAddress = req ? (req.ip || req.connection.remoteAddress || 'unknown') : undefined;
+        const userAgent = req ? req.get('User-Agent') || 'unknown' : undefined;
+        await database_1.default.systemLog.create({
+            data: {
+                type,
+                message,
+                details,
+                userId,
+                userEmail,
+                severity,
+                ipAddress,
+                userAgent
+            }
+        });
+        console.log(`📝 System log created: ${type} - ${message}`);
+    }
+    catch (error) {
+        console.error('❌ Failed to create system log:', error);
+    }
+}
+// Comprehensive conversion tracking function
+async function trackBackendConversion(params) {
+    try {
+        const { toolType, originalFileName, convertedFileName, fileSize, userId, status = 'COMPLETED', req } = params;
+        // Get client info for tracking
+        const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+        const userAgent = req.get('User-Agent') || 'unknown';
+        // Create conversion record
+        await database_1.default.conversion.create({
+            data: {
+                userId,
+                originalFileName,
+                convertedFileName,
+                toolType,
+                fileSize,
+                status,
+                processingLocation: 'BACKEND',
+                isAuthenticated: !!userId,
+                ipAddress,
+                userAgent
+            }
+        });
+        // Create file record for FileManagement component (only for authenticated users)
+        if (userId) {
+            await database_1.default.fileRecord.create({
+                data: {
+                    filename: originalFileName,
+                    fileType: mapToolToFileType(toolType),
+                    originalExtension: getFileExtension(originalFileName),
+                    uploadedById: userId,
+                    status: mapConversionStatusToFileStatus(status),
+                    fileSize,
+                    downloadUrl: convertedFileName ? `/downloads/${convertedFileName}` : undefined,
+                    errorMessage: status === 'FAILED' ? 'Conversion failed' : undefined
+                }
+            });
+        }
+        // Update user total conversions if authenticated
+        if (userId) {
+            await database_1.default.user.update({
+                where: { id: userId },
+                data: {
+                    totalConversions: {
+                        increment: 1
+                    }
+                }
+            });
+        }
+        console.log(`✅ Tracked backend conversion: ${toolType} for ${userId ? 'authenticated' : 'anonymous'} user`);
+        // Log successful conversion
+        await logSystemEvent({
+            type: 'USER_ACTION',
+            message: `File conversion completed: ${toolType}`,
+            details: `File: ${originalFileName}, Size: ${fileSize} bytes, Status: ${status}`,
+            userId,
+            userEmail: userId ? undefined : undefined, // Will be populated by user lookup if needed
+            severity: 'LOW',
+            req
+        });
+    }
+    catch (error) {
+        console.error('❌ Failed to track backend conversion:', error);
+        // Log conversion tracking error
+        await logSystemEvent({
+            type: 'SYSTEM_ERROR',
+            message: 'Failed to track conversion in database',
+            details: `Tool: ${params.toolType}, File: ${params.originalFileName}, Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            userId: params.userId,
+            severity: 'MEDIUM',
+            req: params.req
+        });
+    }
+}
+// Helper functions for file type mapping
+function mapToolToFileType(toolType) {
+    const mapping = {
+        'word-to-pdf': 'WORD',
+        'excel-to-pdf': 'EXCEL',
+        'powerpoint-to-pdf': 'POWERPOINT',
+        'pdf-to-word': 'PDF',
+        'pdf-to-excel': 'PDF',
+        'pdf-to-powerpoint': 'PDF',
+        'pdf-to-jpg': 'PDF'
+    };
+    return mapping[toolType] || 'OTHER';
+}
+function getFileExtension(filename) {
+    return path_1.default.extname(filename).toLowerCase() || '.unknown';
+}
+function mapConversionStatusToFileStatus(status) {
+    const mapping = {
+        'COMPLETED': 'COMPLETED',
+        'FAILED': 'FAILED',
+        'PENDING': 'PENDING',
+        'PROCESSING': 'CONVERTING'
+    };
+    return mapping[status] || 'PENDING';
+}
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3002;
 // Create uploads and temp directories
@@ -31,11 +159,18 @@ fs_extra_1.default.ensureDirSync(tempDir);
 app.use(security_1.securityHeaders);
 app.use((0, cors_1.default)(security_1.corsOptions));
 app.use(security_1.generalRateLimit);
+app.use((0, cookie_parser_1.default)()); // Parse HTTP-only cookies
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 app.use(security_1.sanitizeInput);
 // Authentication routes
 app.use('/api/auth', security_1.authRateLimit, auth_1.default);
+// File records routes
+app.use('/api', fileRecords_1.default);
+// System logs routes
+app.use('/api', systemLogs_1.default);
+// Contact form routes
+app.use('/api', contact_1.default);
 // Configure multer for file uploads
 const storage = multer_1.default.diskStorage({
     destination: (req, file, cb) => {
@@ -82,12 +217,30 @@ async function convertToPDF(inputPath) {
         const outputDir = tempDir;
         const inputFileName = path_1.default.basename(inputPath);
         const inputFileNameWithoutExt = path_1.default.basename(inputPath, path_1.default.extname(inputPath));
+        const fileExtension = path_1.default.extname(inputPath).toLowerCase();
         console.log(`Converting ${inputFileName} to PDF...`);
-        // LibreOffice command to convert to PDF
-        const command = `soffice --headless --convert-to pdf --outdir "${outputDir}" "${inputPath}"`;
+        console.log(`File type detected: ${fileExtension}`);
+        // For Excel files, use specialized conversion with multiple fallback methods
+        if (fileExtension === '.xlsx' || fileExtension === '.xls') {
+            return await convertExcelToPDF(inputPath);
+        }
+        // Enhanced LibreOffice command with specific options for different file types
+        let command;
+        if (fileExtension === '.docx' || fileExtension === '.doc') {
+            // Enhanced Word to PDF conversion
+            command = `soffice --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to "pdf:writer_pdf_Export" --outdir "${outputDir}" "${inputPath}"`;
+        }
+        else if (fileExtension === '.pptx' || fileExtension === '.ppt') {
+            // Enhanced PowerPoint to PDF conversion
+            command = `soffice --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to "pdf:impress_pdf_Export" --outdir "${outputDir}" "${inputPath}"`;
+        }
+        else {
+            // Fallback for other file types
+            command = `soffice --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to pdf --outdir "${outputDir}" "${inputPath}"`;
+        }
         console.log(`Executing: ${command}`);
         const { stdout, stderr } = await execAsync(command, {
-            timeout: 30000 // 30 seconds timeout
+            timeout: 60000 // Increased timeout to 60 seconds for complex conversions
         });
         if (stderr) {
             console.warn('LibreOffice stderr:', stderr);
@@ -109,6 +262,73 @@ async function convertToPDF(inputPath) {
         throw new Error(`Failed to convert file to PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
+// Specialized Excel to PDF conversion with multiple fallback methods
+async function convertExcelToPDF(inputPath) {
+    try {
+        const outputDir = tempDir;
+        const inputFileName = path_1.default.basename(inputPath);
+        const inputFileNameWithoutExt = path_1.default.basename(inputPath, path_1.default.extname(inputPath));
+        console.log(`🔄 Starting specialized Excel to PDF conversion for: ${inputFileName}`);
+        // Multiple conversion methods to try in order of preference
+        const conversionMethods = [
+            // Method 1: Using calc_pdf_Export with explicit filter
+            `soffice --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to "pdf:calc_pdf_Export" --outdir "${outputDir}" "${inputPath}"`,
+            // Method 2: Standard PDF conversion with calc-specific options
+            `soffice --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to pdf --outdir "${outputDir}" "${inputPath}"`,
+            // Method 3: Using LibreOffice Calc directly with macro execution disabled
+            `soffice --calc --headless --invisible --nodefault --nolockcheck --nologo --norestore --convert-to pdf --outdir "${outputDir}" "${inputPath}"`,
+            // Method 4: Basic fallback
+            `soffice --headless --convert-to pdf --outdir "${outputDir}" "${inputPath}"`
+        ];
+        let lastError = null;
+        for (let i = 0; i < conversionMethods.length; i++) {
+            const command = conversionMethods[i];
+            console.log(`📝 Attempting Excel conversion method ${i + 1}/${conversionMethods.length}`);
+            console.log(`🔧 Command: ${command}`);
+            try {
+                const { stdout, stderr } = await execAsync(command, {
+                    timeout: 90000 // 90 seconds timeout for Excel conversions
+                });
+                if (stderr) {
+                    console.warn(`⚠️ LibreOffice stderr (method ${i + 1}):`, stderr);
+                }
+                console.log(`📄 LibreOffice stdout (method ${i + 1}):`, stdout);
+                // Check if the PDF was created
+                const outputPdfPath = path_1.default.join(outputDir, `${inputFileNameWithoutExt}.pdf`);
+                if (await fs_extra_1.default.pathExists(outputPdfPath)) {
+                    // Verify the PDF has content (not just an empty file)
+                    const stats = await fs_extra_1.default.stat(outputPdfPath);
+                    if (stats.size > 1000) { // At least 1KB to ensure it's not empty
+                        console.log(`✅ Excel to PDF conversion successful with method ${i + 1}: ${outputPdfPath} (${stats.size} bytes)`);
+                        return outputPdfPath;
+                    }
+                    else {
+                        console.warn(`⚠️ PDF created but appears empty (${stats.size} bytes), trying next method...`);
+                        await fs_extra_1.default.remove(outputPdfPath); // Clean up empty PDF
+                    }
+                }
+                else {
+                    console.warn(`⚠️ PDF not created with method ${i + 1}, trying next method...`);
+                }
+            }
+            catch (error) {
+                console.warn(`⚠️ Method ${i + 1} failed:`, error instanceof Error ? error.message : 'Unknown error');
+                lastError = error instanceof Error ? error : new Error('Unknown error');
+                // If this isn't the last method, continue to the next one
+                if (i < conversionMethods.length - 1) {
+                    console.log(`🔄 Trying next conversion method...`);
+                    continue;
+                }
+            }
+        }
+        // If we get here, all methods failed
+        throw new Error(`All Excel to PDF conversion methods failed. Last error: ${lastError?.message || 'Unknown error'}`);
+    }
+    catch (error) {
+        console.error('❌ Excel to PDF conversion failed:', error);
+        throw new Error(`Failed to convert Excel file to PDF: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+}
 // Helper function to convert PDF to JPG using pdf-poppler and sharp
 async function convertPDFToJPG(inputPath) {
     try {
@@ -118,9 +338,7 @@ async function convertPDFToJPG(inputPath) {
         console.log(`Converting ${inputFileName} to JPG...`);
         // First, get the page count to understand what we're dealing with
         try {
-            const { exec } = require('child_process');
-            const { promisify } = require('util');
-            const execAsync = promisify(exec);
+            const execAsync = (0, util_1.promisify)(child_process_1.exec);
             const { stdout } = await execAsync(`pdfinfo "${inputPath}"`);
             const pageMatch = stdout.match(/Pages:\s*(\d+)/);
             const pageCount = pageMatch ? parseInt(pageMatch[1]) : 1;
@@ -136,7 +354,7 @@ async function convertPDFToJPG(inputPath) {
             page: null // null = all pages
         };
         // Convert all PDF pages to images using pdf-poppler
-        const pdfInfo = await pdfPoppler.convert(inputPath, opts);
+        const pdfInfo = await pdf_poppler_1.default.convert(inputPath, opts);
         console.log("✅ PDF pages converted via Poppler");
         console.log("🔍 Poppler conversion info:", pdfInfo);
         // Get the number of pages by checking the generated files
@@ -447,22 +665,21 @@ async function detectPDFType(inputPath) {
         return 'text-based'; // Default to text-based if detection fails
     }
 }
-// Enhanced PDF to PowerPoint conversion function
-async function convertPDFToPowerPointEnhanced(inputPath) {
+// Layout-preserving PDF to PowerPoint conversion function (preserves original layout using PyMuPDF + python-pptx)
+async function convertPDFToPowerPointLayoutPreserving(inputPath) {
     try {
         const outputDir = tempDir;
-        const inputFileName = path_1.default.basename(inputPath);
         const inputFileNameWithoutExt = path_1.default.basename(inputPath, path_1.default.extname(inputPath));
-        const outputFilePath = path_1.default.join(outputDir, `${inputFileNameWithoutExt}_enhanced.pptx`);
-        console.log(`🚀 Enhanced PDF to PowerPoint conversion started`);
+        const outputFilePath = path_1.default.join(outputDir, `${inputFileNameWithoutExt}_layout.pptx`);
+        console.log(`🚀 Layout-preserving PDF to PowerPoint conversion started`);
         console.log(`📁 Input: ${inputPath}`);
         console.log(`📁 Output: ${outputFilePath}`);
         // Check if input file exists
         if (!await fs_extra_1.default.pathExists(inputPath)) {
             throw new Error(`Input PDF file not found: ${inputPath}`);
         }
-        // Prepare Python command for enhanced converter
-        const pythonScript = path_1.default.join(__dirname, '..', 'ocr-service', 'enhanced_pdf_to_ppt_converter.py');
+        // Prepare Python command for layout-preserving converter
+        const pythonScript = path_1.default.join(__dirname, '..', 'ocr-service', 'pdf_to_ppt_layout_preserving.py');
         // Try different Python executables in order of preference
         const pythonExecutables = [
             'C:\\Users\\taaee\\AppData\\Local\\Programs\\Python\\Python313\\python.exe',
@@ -489,8 +706,8 @@ async function convertPDFToPowerPointEnhanced(inputPath) {
                 continue;
             }
         }
-        const command = `"${pythonExecutable}" "${pythonScript}" "${inputPath}" "${outputFilePath}" --ocr-engine tesseract --dpi 200`;
-        console.log(`🐍 Executing enhanced Python converter: ${command}`);
+        const command = `"${pythonExecutable}" "${pythonScript}" "${inputPath}" "${outputFilePath}"`;
+        console.log(`🐍 Executing layout-preserving Python converter: ${command}`);
         try {
             const { stdout, stderr } = await execAsync(command, {
                 timeout: 300000, // 5 minutes timeout
@@ -498,27 +715,27 @@ async function convertPDFToPowerPointEnhanced(inputPath) {
                 cwd: path_1.default.dirname(pythonScript)
             });
             if (stderr && !stderr.includes('WARNING') && !stderr.includes('INFO')) {
-                console.warn(`⚠️ Enhanced converter stderr:`, stderr);
+                console.warn(`⚠️ Layout-preserving converter stderr:`, stderr);
             }
             if (stdout) {
-                console.log(`📄 Enhanced converter output:`, stdout);
+                console.log(`📄 Layout-preserving converter output:`, stdout);
             }
             // Check if output file was created
             if (!await fs_extra_1.default.pathExists(outputFilePath)) {
-                throw new Error(`Enhanced converter did not create output file: ${outputFilePath}`);
+                throw new Error(`Layout-preserving converter did not create output file: ${outputFilePath}`);
             }
             const stats = await fs_extra_1.default.stat(outputFilePath);
-            console.log(`✅ Enhanced PowerPoint conversion successful: ${outputFilePath} (${stats.size} bytes)`);
+            console.log(`✅ Layout-preserving PowerPoint conversion successful: ${outputFilePath} (${stats.size} bytes)`);
             return outputFilePath;
         }
         catch (execError) {
-            console.error(`❌ Enhanced Python converter execution failed:`, execError);
-            throw new Error(`Enhanced PowerPoint conversion failed: ${execError instanceof Error ? execError.message : 'Unknown error'}`);
+            console.error(`❌ Layout-preserving Python converter execution failed:`, execError);
+            throw new Error(`Layout-preserving PowerPoint conversion failed: ${execError instanceof Error ? execError.message : 'Unknown error'}`);
         }
     }
     catch (error) {
-        console.error(`❌ Enhanced PDF to PowerPoint conversion failed:`, error);
-        throw new Error(`Enhanced conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        console.error(`❌ Layout-preserving PDF to PowerPoint conversion failed:`, error);
+        throw new Error(`Layout-preserving conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
 // Helper function to convert PDF using OCR (for scanned/image-based PDFs)
@@ -670,6 +887,77 @@ async function convertPDFToWordWithOCR(inputPath) {
         throw new Error(`Failed to convert PDF using OCR + pdf2docx: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
 }
+// Professional PDF to Excel conversion using Camelot + Tabula
+async function convertPDFToExcelProfessional(inputPath) {
+    try {
+        const outputDir = tempDir;
+        const inputFileName = path_1.default.basename(inputPath);
+        const inputFileNameWithoutExt = path_1.default.basename(inputPath, path_1.default.extname(inputPath));
+        const outputFilePath = path_1.default.join(outputDir, `${inputFileNameWithoutExt}_professional.xlsx`);
+        console.log(`🏆 Converting PDF to Excel using professional methods (Camelot + Tabula): ${inputFileName}`);
+        console.log(`📁 Input: ${inputPath}`);
+        console.log(`📁 Output: ${outputFilePath}`);
+        // Path to professional PDF converter script
+        const converterScriptPath = path_1.default.join(__dirname, '../ocr-service/professional_pdf_converter.py');
+        // Check if Python script exists
+        if (!await fs_extra_1.default.pathExists(converterScriptPath)) {
+            throw new Error(`Professional PDF converter script not found: ${converterScriptPath}`);
+        }
+        // Use the correct Python executable
+        const pythonExecutable = 'C:\\Users\\taaee\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
+        const pythonCommand = `"${pythonExecutable}" "${converterScriptPath}" "${inputPath}" "${outputFilePath}" --verbose`;
+        console.log(`🔧 Executing professional PDF to Excel conversion: ${pythonCommand}`);
+        // Clean environment to avoid LibreOffice Python conflicts
+        const cleanEnv = { ...process.env };
+        if (cleanEnv.PATH) {
+            cleanEnv.PATH = cleanEnv.PATH
+                .split(';')
+                .filter(pathPart => !pathPart.toLowerCase().includes('libreoffice'))
+                .join(';');
+        }
+        const { stdout, stderr } = await execAsync(pythonCommand, {
+            timeout: 120000, // 2 minutes timeout for complex PDFs
+            env: cleanEnv
+        });
+        if (stderr) {
+            console.warn('Professional converter stderr:', stderr);
+        }
+        console.log('Professional converter stdout:', stdout);
+        // Parse the JSON result from the converter
+        try {
+            const lines = stdout.split('\n');
+            const resultLine = lines.find(line => line.includes('CONVERSION RESULT:') || line.includes('{'));
+            if (resultLine) {
+                const jsonStart = resultLine.indexOf('{');
+                if (jsonStart !== -1) {
+                    const result = JSON.parse(resultLine.substring(jsonStart));
+                    console.log('📊 Professional conversion result:', result);
+                    if (!result.success) {
+                        throw new Error(`Professional conversion failed: ${result.error}`);
+                    }
+                    console.log(`✅ Professional conversion successful: ${result.tables_found} tables found using ${result.method_used}`);
+                }
+            }
+        }
+        catch (parseError) {
+            console.warn('Could not parse conversion result JSON, but continuing...', parseError);
+        }
+        // Check if output file was created
+        if (!await fs_extra_1.default.pathExists(outputFilePath)) {
+            throw new Error(`Professional conversion output file not found: ${outputFilePath}`);
+        }
+        const stats = await fs_extra_1.default.stat(outputFilePath);
+        console.log(`📏 Professional conversion output file size: ${stats.size} bytes`);
+        if (stats.size === 0) {
+            throw new Error('Professional conversion produced an empty file');
+        }
+        return outputFilePath;
+    }
+    catch (error) {
+        console.error(`❌ Professional PDF to Excel conversion failed:`, error);
+        throw new Error(`Professional PDF to Excel conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+}
 // Unified PDF to Office conversion function with smart routing
 async function convertPDFToOfficeWithDetection(inputPath, outputFormat) {
     try {
@@ -705,14 +993,47 @@ async function convertPDFToOfficeWithDetection(inputPath, outputFormat) {
             }
         }
         else if (outputFormat === 'pptx') {
-            // For PowerPoint, use the enhanced converter
-            console.log(`🎯 Using enhanced PowerPoint converter`);
-            outputFilePath = await convertPDFToPowerPointEnhanced(inputPath);
-            console.log(`✅ Enhanced PowerPoint conversion successful`);
+            // For PowerPoint, use the layout-preserving converter to maintain original layout
+            console.log(`🎯 Using layout-preserving PowerPoint converter`);
+            outputFilePath = await convertPDFToPowerPointLayoutPreserving(inputPath);
+            console.log(`✅ Layout-preserving PowerPoint conversion successful`);
             return outputFilePath;
         }
+        else if (outputFormat === 'xlsx') {
+            // For Excel, use the new professional converter with multiple methods
+            console.log(`🏆 Using professional PDF to Excel converter (Camelot + Tabula + fallbacks)`);
+            try {
+                outputFilePath = await convertPDFToExcelProfessional(inputPath);
+                console.log(`✅ Professional Excel conversion successful`);
+                return outputFilePath;
+            }
+            catch (professionalError) {
+                console.warn(`⚠️ Professional Excel conversion failed, falling back to LibreOffice + OCR: ${professionalError}`);
+                // Fallback to the old method if professional converter fails
+                if (pdfType === 'text-based') {
+                    console.log(`🔄 Fallback: Using LibreOffice for text-based PDF`);
+                    try {
+                        outputFilePath = await convertPDFToOffice(inputPath, outputFormat);
+                        console.log(`✅ LibreOffice fallback conversion successful`);
+                        return outputFilePath;
+                    }
+                    catch (libreOfficeError) {
+                        console.warn(`⚠️ LibreOffice fallback failed, using OCR: ${libreOfficeError}`);
+                        outputFilePath = await convertPDFWithOCR(inputPath, outputFormat);
+                        console.log(`✅ OCR fallback conversion successful`);
+                        return outputFilePath;
+                    }
+                }
+                else {
+                    console.log(`🔄 Fallback: Using OCR for image-based/scanned PDF`);
+                    outputFilePath = await convertPDFWithOCR(inputPath, outputFormat);
+                    console.log(`✅ OCR fallback conversion successful`);
+                    return outputFilePath;
+                }
+            }
+        }
         else {
-            // For Excel, use the existing LibreOffice + OCR approach
+            // For other formats, use the existing LibreOffice + OCR approach
             if (pdfType === 'text-based') {
                 // Step 2a: Use LibreOffice for text-based PDFs
                 console.log(`📄 Using LibreOffice conversion for text-based PDF`);
@@ -778,8 +1099,8 @@ app.get('/', (req, res) => {
         }
     });
 });
-// Main conversion route (protected - requires authentication)
-app.post('/convert', auth_2.authenticate, upload.single('file'), async (req, res) => {
+// Main conversion route (public - no authentication required)
+app.post('/convert', upload.single('file'), async (req, res) => {
     let inputFilePath;
     let outputFilePath;
     try {
@@ -805,11 +1126,40 @@ app.post('/convert', auth_2.authenticate, upload.single('file'), async (req, res
         res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
         res.setHeader('Content-Length', pdfBuffer.length.toString());
         console.log(`📤 Sending PDF: ${outputFileName} (${pdfBuffer.length} bytes)`);
+        // Track conversion (anonymous user)
+        await trackBackendConversion({
+            toolType: 'office-to-pdf',
+            originalFileName,
+            convertedFileName: outputFileName,
+            fileSize: req.file.size,
+            userId: undefined, // Anonymous conversion
+            status: 'COMPLETED',
+            req
+        });
         // Send the PDF file
         res.send(pdfBuffer);
     }
     catch (error) {
         console.error('❌ Conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'office-to-pdf',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: undefined, // Anonymous conversion
+                status: 'FAILED',
+                req
+            });
+            // Log conversion error
+            await logSystemEvent({
+                type: 'CONVERSION_ERROR',
+                message: `Office to PDF conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                details: `File: ${req.file.originalname}, Size: ${req.file.size} bytes, Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                severity: 'MEDIUM',
+                req
+            });
+        }
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error occurred during conversion'
@@ -825,8 +1175,8 @@ app.post('/convert', auth_2.authenticate, upload.single('file'), async (req, res
         }
     }
 });
-// PDF to JPG conversion route (protected - requires authentication)
-app.post('/pdf-to-jpg', auth_2.authenticate, upload.single('file'), async (req, res) => {
+// PDF to JPG conversion route (public - no authentication required)
+app.post('/pdf-to-jpg', upload.single('file'), async (req, res) => {
     let inputFilePath;
     let outputFilePaths = [];
     try {
@@ -861,6 +1211,16 @@ app.post('/pdf-to-jpg', auth_2.authenticate, upload.single('file'), async (req, 
             res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
             res.setHeader('Content-Length', jpgBuffer.length.toString());
             console.log(`📤 Sending JPG: ${outputFileName} (${jpgBuffer.length} bytes)`);
+            // Track conversion (anonymous user)
+            await trackBackendConversion({
+                toolType: 'pdf-to-jpg',
+                originalFileName,
+                convertedFileName: outputFileName,
+                fileSize: req.file.size,
+                userId: undefined, // Anonymous conversion
+                status: 'COMPLETED',
+                req
+            });
             res.send(jpgBuffer);
         }
         else {
@@ -901,10 +1261,31 @@ app.post('/pdf-to-jpg', auth_2.authenticate, upload.single('file'), async (req, 
             console.log('🗜️ Finalizing ZIP archive...');
             await archive.finalize();
             console.log(`📤 Sending ZIP with ${outputFilePaths.length} JPG files: ${outputFileName}`);
+            // Track conversion (anonymous user)
+            await trackBackendConversion({
+                toolType: 'pdf-to-jpg',
+                originalFileName,
+                convertedFileName: outputFileName,
+                fileSize: req.file.size,
+                userId: undefined, // Anonymous conversion
+                status: 'COMPLETED',
+                req
+            });
         }
     }
     catch (error) {
         console.error('❌ PDF to JPG conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'pdf-to-jpg',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: undefined, // Anonymous conversion
+                status: 'FAILED',
+                req
+            });
+        }
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error occurred during PDF to JPG conversion'
@@ -920,8 +1301,8 @@ app.post('/pdf-to-jpg', auth_2.authenticate, upload.single('file'), async (req, 
         }
     }
 });
-// PDF to Word conversion route (protected - requires authentication)
-app.post('/pdf-to-word', auth_2.authenticate, upload.single('file'), async (req, res) => {
+// PDF to Word conversion route (public - no authentication required)
+app.post('/pdf-to-word', upload.single('file'), async (req, res) => {
     let inputFilePath;
     let outputFilePath;
     try {
@@ -954,11 +1335,32 @@ app.post('/pdf-to-word', auth_2.authenticate, upload.single('file'), async (req,
         res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
         res.setHeader('Content-Length', wordBuffer.length.toString());
         console.log(`📤 Sending Word document: ${outputFileName} (${wordBuffer.length} bytes)`);
+        // Track conversion (anonymous user)
+        await trackBackendConversion({
+            toolType: 'pdf-to-word',
+            originalFileName,
+            convertedFileName: outputFileName,
+            fileSize: req.file.size,
+            userId: undefined, // Anonymous conversion
+            status: 'COMPLETED',
+            req
+        });
         // Send the Word file
         res.send(wordBuffer);
     }
     catch (error) {
         console.error('❌ PDF to Word conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'pdf-to-word',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: undefined, // Anonymous conversion
+                status: 'FAILED',
+                req
+            });
+        }
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error occurred during PDF to Word conversion'
@@ -974,8 +1376,8 @@ app.post('/pdf-to-word', auth_2.authenticate, upload.single('file'), async (req,
         }
     }
 });
-// PDF to Excel conversion route (protected - requires authentication)
-app.post('/pdf-to-excel', auth_2.authenticate, upload.single('file'), async (req, res) => {
+// PDF to Excel conversion route (public - no authentication required)
+app.post('/pdf-to-excel', upload.single('file'), async (req, res) => {
     let inputFilePath;
     let outputFilePath;
     try {
@@ -1008,11 +1410,32 @@ app.post('/pdf-to-excel', auth_2.authenticate, upload.single('file'), async (req
         res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
         res.setHeader('Content-Length', excelBuffer.length.toString());
         console.log(`📤 Sending Excel document: ${outputFileName} (${excelBuffer.length} bytes)`);
+        // Track conversion (anonymous user)
+        await trackBackendConversion({
+            toolType: 'pdf-to-excel',
+            originalFileName,
+            convertedFileName: outputFileName,
+            fileSize: req.file.size,
+            userId: undefined, // Anonymous conversion
+            status: 'COMPLETED',
+            req
+        });
         // Send the Excel file
         res.send(excelBuffer);
     }
     catch (error) {
         console.error('❌ PDF to Excel conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'pdf-to-excel',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: undefined, // Anonymous conversion
+                status: 'FAILED',
+                req
+            });
+        }
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error occurred during PDF to Excel conversion'
@@ -1028,8 +1451,8 @@ app.post('/pdf-to-excel', auth_2.authenticate, upload.single('file'), async (req
         }
     }
 });
-// PDF to PowerPoint conversion route (protected - requires authentication)
-app.post('/pdf-to-powerpoint', auth_2.authenticate, upload.single('file'), async (req, res) => {
+// PDF to PowerPoint conversion route (public - no authentication required)
+app.post('/pdf-to-powerpoint', upload.single('file'), async (req, res) => {
     let inputFilePath;
     let outputFilePath;
     try {
@@ -1062,11 +1485,32 @@ app.post('/pdf-to-powerpoint', auth_2.authenticate, upload.single('file'), async
         res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
         res.setHeader('Content-Length', pptBuffer.length.toString());
         console.log(`📤 Sending PowerPoint document: ${outputFileName} (${pptBuffer.length} bytes)`);
+        // Track conversion (anonymous user)
+        await trackBackendConversion({
+            toolType: 'pdf-to-powerpoint',
+            originalFileName,
+            convertedFileName: outputFileName,
+            fileSize: req.file.size,
+            userId: undefined, // Anonymous conversion
+            status: 'COMPLETED',
+            req
+        });
         // Send the PowerPoint file
         res.send(pptBuffer);
     }
     catch (error) {
         console.error('❌ PDF to PowerPoint conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'pdf-to-powerpoint',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: undefined, // Anonymous conversion
+                status: 'FAILED',
+                req
+            });
+        }
         res.status(500).json({
             success: false,
             error: error instanceof Error ? error.message : 'Unknown error occurred during PDF to PowerPoint conversion'
@@ -1082,6 +1526,437 @@ app.post('/pdf-to-powerpoint', auth_2.authenticate, upload.single('file'), async
         }
     }
 });
+// Authenticated conversion routes (for tracking user conversions)
+// These routes are optional - if the user is authenticated, they'll get their conversion tracked
+// Authenticated PDF to Word conversion route
+app.post('/api/convert/pdf-to-word', auth_2.authenticate, upload.single('file'), async (req, res) => {
+    let inputFilePath;
+    let outputFilePath;
+    try {
+        // Check if file was uploaded
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded. Please select a PDF file.'
+            });
+        }
+        inputFilePath = req.file.path;
+        const originalFileName = req.file.originalname;
+        const fileExtension = path_1.default.extname(originalFileName).toLowerCase();
+        // Check if it's a PDF file
+        if (fileExtension !== '.pdf') {
+            return res.status(400).json({
+                success: false,
+                error: 'Only PDF files are allowed for Word conversion.'
+            });
+        }
+        console.log(`📁 Authenticated PDF to Word conversion for user ${req.user?.userId}: ${originalFileName} (${req.file.size} bytes)`);
+        console.log(`📍 Saved to: ${inputFilePath}`);
+        // Convert PDF to Word using intelligent routing
+        outputFilePath = await convertPDFToOfficeWithDetection(inputFilePath, 'docx');
+        // Read the converted Word document
+        const wordBuffer = await fs_extra_1.default.readFile(outputFilePath);
+        // Set response headers for Word download
+        const outputFileName = `${path_1.default.basename(originalFileName, fileExtension)}.docx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+        res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
+        res.setHeader('Content-Length', wordBuffer.length.toString());
+        console.log(`📤 Sending Word document: ${outputFileName} (${wordBuffer.length} bytes)`);
+        // Track conversion
+        await trackBackendConversion({
+            toolType: 'pdf-to-word',
+            originalFileName,
+            convertedFileName: outputFileName,
+            fileSize: req.file.size,
+            userId: req.user?.userId,
+            status: 'COMPLETED',
+            req
+        });
+        // Send the Word file
+        res.send(wordBuffer);
+    }
+    catch (error) {
+        console.error('❌ Authenticated PDF to Word conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'pdf-to-word',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: req.user?.userId,
+                status: 'FAILED',
+                req
+            });
+        }
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred during PDF to Word conversion'
+        });
+    }
+    finally {
+        // Clean up uploaded and converted files
+        if (inputFilePath) {
+            await cleanupFiles(inputFilePath);
+        }
+        if (outputFilePath) {
+            await cleanupFiles(outputFilePath);
+        }
+    }
+});
+// Authenticated PDF to Excel conversion route
+app.post('/api/convert/pdf-to-excel', auth_2.authenticate, upload.single('file'), async (req, res) => {
+    let inputFilePath;
+    let outputFilePath;
+    try {
+        // Check if file was uploaded
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded. Please select a PDF file.'
+            });
+        }
+        inputFilePath = req.file.path;
+        const originalFileName = req.file.originalname;
+        const fileExtension = path_1.default.extname(originalFileName).toLowerCase();
+        // Check if it's a PDF file
+        if (fileExtension !== '.pdf') {
+            return res.status(400).json({
+                success: false,
+                error: 'Only PDF files are allowed for Excel conversion.'
+            });
+        }
+        console.log(`📁 Authenticated PDF to Excel conversion for user ${req.user?.userId}: ${originalFileName} (${req.file.size} bytes)`);
+        console.log(`📍 Saved to: ${inputFilePath}`);
+        // Convert PDF to Excel using intelligent routing
+        outputFilePath = await convertPDFToOfficeWithDetection(inputFilePath, 'xlsx');
+        // Read the converted Excel document
+        const excelBuffer = await fs_extra_1.default.readFile(outputFilePath);
+        // Set response headers for Excel download
+        const outputFileName = `${path_1.default.basename(originalFileName, fileExtension)}.xlsx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
+        res.setHeader('Content-Length', excelBuffer.length.toString());
+        console.log(`📤 Sending Excel document: ${outputFileName} (${excelBuffer.length} bytes)`);
+        // Track conversion
+        await trackBackendConversion({
+            toolType: 'pdf-to-excel',
+            originalFileName,
+            convertedFileName: outputFileName,
+            fileSize: req.file.size,
+            userId: req.user?.userId,
+            status: 'COMPLETED',
+            req
+        });
+        // Send the Excel file
+        res.send(excelBuffer);
+    }
+    catch (error) {
+        console.error('❌ Authenticated PDF to Excel conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'pdf-to-excel',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: req.user?.userId,
+                status: 'FAILED',
+                req
+            });
+        }
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred during PDF to Excel conversion'
+        });
+    }
+    finally {
+        // Clean up uploaded and converted files
+        if (inputFilePath) {
+            await cleanupFiles(inputFilePath);
+        }
+        if (outputFilePath) {
+            await cleanupFiles(outputFilePath);
+        }
+    }
+});
+// Authenticated PDF to PowerPoint conversion route
+app.post('/api/convert/pdf-to-powerpoint', auth_2.authenticate, upload.single('file'), async (req, res) => {
+    let inputFilePath;
+    let outputFilePath;
+    try {
+        // Check if file was uploaded
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded. Please select a PDF file.'
+            });
+        }
+        inputFilePath = req.file.path;
+        const originalFileName = req.file.originalname;
+        const fileExtension = path_1.default.extname(originalFileName).toLowerCase();
+        // Check if it's a PDF file
+        if (fileExtension !== '.pdf') {
+            return res.status(400).json({
+                success: false,
+                error: 'Only PDF files are allowed for PowerPoint conversion.'
+            });
+        }
+        console.log(`📁 Authenticated PDF to PowerPoint conversion for user ${req.user?.userId}: ${originalFileName} (${req.file.size} bytes)`);
+        console.log(`📍 Saved to: ${inputFilePath}`);
+        // Convert PDF to PowerPoint using enhanced converter
+        outputFilePath = await convertPDFToOfficeWithDetection(inputFilePath, 'pptx');
+        // Read the converted PowerPoint document
+        const pptBuffer = await fs_extra_1.default.readFile(outputFilePath);
+        // Set response headers for PowerPoint download
+        const outputFileName = `${path_1.default.basename(originalFileName, fileExtension)}.pptx`;
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+        res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
+        res.setHeader('Content-Length', pptBuffer.length.toString());
+        console.log(`📤 Sending PowerPoint document: ${outputFileName} (${pptBuffer.length} bytes)`);
+        // Track conversion
+        await trackBackendConversion({
+            toolType: 'pdf-to-powerpoint',
+            originalFileName,
+            convertedFileName: outputFileName,
+            fileSize: req.file.size,
+            userId: req.user?.userId,
+            status: 'COMPLETED',
+            req
+        });
+        // Send the PowerPoint file
+        res.send(pptBuffer);
+    }
+    catch (error) {
+        console.error('❌ Authenticated PDF to PowerPoint conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'pdf-to-powerpoint',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: req.user?.userId,
+                status: 'FAILED',
+                req
+            });
+        }
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred during PDF to PowerPoint conversion'
+        });
+    }
+    finally {
+        // Clean up uploaded and converted files
+        if (inputFilePath) {
+            await cleanupFiles(inputFilePath);
+        }
+        if (outputFilePath) {
+            await cleanupFiles(outputFilePath);
+        }
+    }
+});
+// Authenticated Office to PDF conversion route
+app.post('/api/convert/to-pdf', auth_2.authenticate, upload.single('file'), async (req, res) => {
+    let inputFilePath;
+    let outputFilePath;
+    try {
+        // Check if file was uploaded
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded. Please select a Word, Excel, or PowerPoint file.'
+            });
+        }
+        inputFilePath = req.file.path;
+        const originalFileName = req.file.originalname;
+        const fileExtension = path_1.default.extname(originalFileName).toLowerCase();
+        console.log(`📁 Authenticated Office to PDF conversion for user ${req.user?.userId}: ${originalFileName} (${req.file.size} bytes)`);
+        console.log(`📍 Saved to: ${inputFilePath}`);
+        // Convert to PDF using LibreOffice
+        outputFilePath = await convertToPDF(inputFilePath);
+        // Read the converted PDF
+        const pdfBuffer = await fs_extra_1.default.readFile(outputFilePath);
+        // Set response headers for PDF download
+        const outputFileName = `${path_1.default.basename(originalFileName, fileExtension)}.pdf`;
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
+        res.setHeader('Content-Length', pdfBuffer.length.toString());
+        console.log(`📤 Sending PDF: ${outputFileName} (${pdfBuffer.length} bytes)`);
+        // Track conversion
+        await trackBackendConversion({
+            toolType: 'office-to-pdf',
+            originalFileName,
+            convertedFileName: outputFileName,
+            fileSize: req.file.size,
+            userId: req.user?.userId,
+            status: 'COMPLETED',
+            req
+        });
+        // Send the PDF file
+        res.send(pdfBuffer);
+    }
+    catch (error) {
+        console.error('❌ Authenticated Office to PDF conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'office-to-pdf',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: req.user?.userId,
+                status: 'FAILED',
+                req
+            });
+        }
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred during conversion'
+        });
+    }
+    finally {
+        // Clean up uploaded and converted files
+        if (inputFilePath) {
+            await cleanupFiles(inputFilePath);
+        }
+        if (outputFilePath) {
+            await cleanupFiles(outputFilePath);
+        }
+    }
+});
+// Authenticated PDF to JPG conversion route
+app.post('/api/convert/pdf-to-jpg', auth_2.authenticate, upload.single('file'), async (req, res) => {
+    let inputFilePath;
+    let outputFilePaths = [];
+    try {
+        // Check if file was uploaded
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                error: 'No file uploaded. Please select a PDF file.'
+            });
+        }
+        inputFilePath = req.file.path;
+        const originalFileName = req.file.originalname;
+        const fileExtension = path_1.default.extname(originalFileName).toLowerCase();
+        // Check if it's a PDF file
+        if (fileExtension !== '.pdf') {
+            return res.status(400).json({
+                success: false,
+                error: 'Only PDF files are allowed for JPG conversion.'
+            });
+        }
+        console.log(`📁 Authenticated PDF to JPG conversion for user ${req.user?.userId}: ${originalFileName} (${req.file.size} bytes)`);
+        console.log(`📍 Saved to: ${inputFilePath}`);
+        // Convert PDF to JPG using Poppler
+        outputFilePaths = await convertPDFToJPG(inputFilePath);
+        console.log(`🔍 Conversion result: ${outputFilePaths.length} files generated`);
+        console.log(`📄 Output files:`, outputFilePaths.map(filePath => path_1.default.basename(filePath)));
+        if (outputFilePaths.length === 1) {
+            // Single page - send the JPG file directly
+            const jpgBuffer = await fs_extra_1.default.readFile(outputFilePaths[0]);
+            const outputFileName = `${path_1.default.basename(originalFileName, fileExtension)}.jpg`;
+            res.setHeader('Content-Type', 'image/jpeg');
+            res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
+            res.setHeader('Content-Length', jpgBuffer.length.toString());
+            console.log(`📤 Sending JPG: ${outputFileName} (${jpgBuffer.length} bytes)`);
+            // Track conversion
+            await trackBackendConversion({
+                toolType: 'pdf-to-jpg',
+                originalFileName,
+                convertedFileName: outputFileName,
+                fileSize: req.file.size,
+                userId: req.user?.userId,
+                status: 'COMPLETED',
+                req
+            });
+            res.send(jpgBuffer);
+        }
+        else {
+            // Multiple pages - create a ZIP file
+            const archive = (0, archiver_1.default)('zip', { zlib: { level: 9 } });
+            const outputFileName = `${path_1.default.basename(originalFileName, fileExtension)}_pages.zip`;
+            res.setHeader('Content-Type', 'application/zip');
+            res.setHeader('Content-Disposition', `attachment; filename="${outputFileName}"`);
+            // Handle archiver events
+            archive.on('error', (err) => {
+                console.error('❌ Archive error:', err);
+                throw err;
+            });
+            // Pipe the archive to the response
+            archive.pipe(res);
+            // Add each JPG file to the archive
+            for (const filePath of outputFilePaths) {
+                const fileName = path_1.default.basename(filePath);
+                archive.file(filePath, { name: fileName });
+            }
+            console.log(`📤 Sending ZIP archive: ${outputFileName} (${outputFilePaths.length} files)`);
+            // Track conversion
+            await trackBackendConversion({
+                toolType: 'pdf-to-jpg',
+                originalFileName,
+                convertedFileName: outputFileName,
+                fileSize: req.file.size,
+                userId: req.user?.userId,
+                status: 'COMPLETED',
+                req
+            });
+            // Finalize the archive
+            await archive.finalize();
+        }
+    }
+    catch (error) {
+        console.error('❌ Authenticated PDF to JPG conversion failed:', error);
+        // Track failed conversion
+        if (req.file) {
+            await trackBackendConversion({
+                toolType: 'pdf-to-jpg',
+                originalFileName: req.file.originalname,
+                fileSize: req.file.size,
+                userId: req.user?.userId,
+                status: 'FAILED',
+                req
+            });
+        }
+        res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error occurred during PDF to JPG conversion'
+        });
+    }
+    finally {
+        // Clean up uploaded and converted files
+        if (inputFilePath) {
+            await cleanupFiles(inputFilePath);
+        }
+        // Clean up all output files
+        for (const filePath of outputFilePaths) {
+            await cleanupFiles(filePath);
+        }
+    }
+});
+// Auth verification endpoint for frontend token validation
+app.get('/api/auth/verify', auth_2.authenticate, async (req, res) => {
+    try {
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'Invalid token'
+            });
+        }
+        res.json({
+            success: true,
+            user: {
+                id: req.user.userId,
+                email: req.user.email,
+                role: req.user.role
+            }
+        });
+    }
+    catch (error) {
+        console.error('Token verification error:', error);
+        res.status(401).json({
+            success: false,
+            message: 'Token verification failed'
+        });
+    }
+});
 // Admin routes
 app.get('/api/admin/users', auth_2.authenticate, auth_2.adminOnly, async (req, res) => {
     try {
@@ -1092,6 +1967,9 @@ app.get('/api/admin/users', auth_2.authenticate, auth_2.adminOnly, async (req, r
                 email: true,
                 role: true,
                 provider: true,
+                isBlocked: true,
+                lastLogin: true,
+                totalConversions: true,
                 createdAt: true,
                 updatedAt: true,
             },
@@ -1143,6 +2021,380 @@ app.patch('/api/admin/users/:userId/role', auth_2.authenticate, auth_2.adminOnly
         res.status(500).json({
             success: false,
             message: 'Failed to update user role',
+        });
+    }
+});
+// Block/Unblock user endpoint
+app.patch('/api/admin/users/:userId/block', auth_2.authenticate, auth_2.adminOnly, async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { isBlocked } = req.body;
+        if (typeof isBlocked !== 'boolean') {
+            res.status(400).json({
+                success: false,
+                message: 'isBlocked must be a boolean value',
+            });
+            return;
+        }
+        // Prevent blocking admin users
+        const user = await database_1.default.user.findUnique({
+            where: { id: userId },
+            select: { role: true, email: true },
+        });
+        if (!user) {
+            res.status(404).json({
+                success: false,
+                message: 'User not found',
+            });
+            return;
+        }
+        if (user.role === 'ADMIN' && isBlocked) {
+            res.status(400).json({
+                success: false,
+                message: 'Cannot block admin users',
+            });
+            return;
+        }
+        const updatedUser = await database_1.default.user.update({
+            where: { id: userId },
+            data: { isBlocked },
+            select: {
+                id: true,
+                name: true,
+                email: true,
+                isBlocked: true,
+                updatedAt: true,
+            },
+        });
+        // Revoke all sessions for blocked users
+        if (isBlocked) {
+            await auth_3.AuthService.revokeAllUserSessions(userId);
+        }
+        res.json({
+            success: true,
+            message: `User ${isBlocked ? 'blocked' : 'unblocked'} successfully`,
+            data: { user: updatedUser },
+        });
+    }
+    catch (error) {
+        console.error('Update user block status error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to update user block status',
+        });
+    }
+});
+// Conversion tracking API endpoint
+app.post('/api/track-conversion', async (req, res) => {
+    try {
+        const { toolType, originalFileName, convertedFileName, fileSize, processingLocation, userId, status = 'COMPLETED' } = req.body;
+        // Validate required fields
+        if (!toolType || !originalFileName || !fileSize || !processingLocation) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields: toolType, originalFileName, fileSize, processingLocation'
+            });
+        }
+        // Get client info for anonymous tracking
+        const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
+        const userAgent = req.get('User-Agent') || 'unknown';
+        // Create conversion record
+        const conversion = await database_1.default.conversion.create({
+            data: {
+                userId,
+                originalFileName,
+                convertedFileName,
+                toolType,
+                fileSize,
+                status,
+                processingLocation,
+                isAuthenticated: !!userId,
+                ipAddress,
+                userAgent
+            }
+        });
+        // Create file record for FileManagement component (only for authenticated users)
+        if (userId) {
+            await database_1.default.fileRecord.create({
+                data: {
+                    filename: originalFileName,
+                    fileType: mapToolToFileType(toolType),
+                    originalExtension: getFileExtension(originalFileName),
+                    uploadedById: userId,
+                    status: mapConversionStatusToFileStatus(status),
+                    fileSize,
+                    downloadUrl: convertedFileName ? `/downloads/${convertedFileName}` : undefined,
+                    errorMessage: status === 'FAILED' ? 'Conversion failed' : undefined
+                }
+            });
+        }
+        // Update user total conversions if authenticated
+        if (userId) {
+            await database_1.default.user.update({
+                where: { id: userId },
+                data: {
+                    totalConversions: {
+                        increment: 1
+                    }
+                }
+            });
+        }
+        console.log(`✅ Tracked conversion: ${toolType} for ${userId ? `user ${userId}` : 'anonymous'}`);
+        res.json({
+            success: true,
+            conversionId: conversion.id
+        });
+    }
+    catch (error) {
+        console.error('❌ Failed to track conversion:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to track conversion'
+        });
+    }
+});
+// Statistics API endpoint (temporarily without auth for testing)
+app.get('/api/statistics', async (req, res) => {
+    try {
+        console.log('Statistics API - Processing request for timeRange:', req.query.timeRange);
+        const { timeRange = '30d' } = req.query;
+        // Calculate date range
+        const now = new Date();
+        const startDate = new Date();
+        switch (timeRange) {
+            case '7d':
+                startDate.setDate(now.getDate() - 7);
+                break;
+            case '30d':
+                startDate.setDate(now.getDate() - 30);
+                break;
+            case '90d':
+                startDate.setDate(now.getDate() - 90);
+                break;
+            case '1y':
+                startDate.setFullYear(now.getFullYear() - 1);
+                break;
+            default:
+                startDate.setDate(now.getDate() - 30);
+        }
+        // Get total uploads in time range
+        const totalUploads = await database_1.default.conversion.count({
+            where: {
+                createdAt: {
+                    gte: startDate
+                }
+            }
+        });
+        // Get previous period for comparison
+        const previousPeriodStart = new Date(startDate);
+        const periodLength = now.getTime() - startDate.getTime();
+        previousPeriodStart.setTime(startDate.getTime() - periodLength);
+        const previousPeriodUploads = await database_1.default.conversion.count({
+            where: {
+                createdAt: {
+                    gte: previousPeriodStart,
+                    lt: startDate
+                }
+            }
+        });
+        // Calculate upload growth percentage
+        const uploadGrowth = previousPeriodUploads === 0 ? 0 :
+            ((totalUploads - previousPeriodUploads) / previousPeriodUploads) * 100;
+        // Get daily uploads for the time range
+        const dailyUploads = await database_1.default.$queryRaw `
+      SELECT 
+        DATE(created_at) as date,
+        COUNT(*) as count
+      FROM conversions 
+      WHERE created_at >= ${startDate}
+      GROUP BY DATE(created_at)
+      ORDER BY date DESC
+      LIMIT 30
+    `;
+        // Transform daily uploads data
+        const transformedDailyUploads = dailyUploads.map(day => ({
+            date: day.date.toISOString().split('T')[0],
+            count: Number(day.count)
+        }));
+        // Get conversion success rate
+        const conversionStats = await database_1.default.conversion.groupBy({
+            by: ['status'],
+            where: {
+                createdAt: {
+                    gte: startDate
+                }
+            },
+            _count: {
+                status: true
+            }
+        });
+        let successful = 0;
+        let failed = 0;
+        conversionStats.forEach(stat => {
+            if (stat.status === 'COMPLETED') {
+                successful = stat._count.status;
+            }
+            else if (stat.status === 'FAILED') {
+                failed = stat._count.status;
+            }
+        });
+        const totalConversions = successful + failed;
+        const successRate = totalConversions === 0 ? 0 : (successful / totalConversions) * 100;
+        // Get previous period success rate for comparison
+        const previousConversionStats = await database_1.default.conversion.groupBy({
+            by: ['status'],
+            where: {
+                createdAt: {
+                    gte: previousPeriodStart,
+                    lt: startDate
+                }
+            },
+            _count: {
+                status: true
+            }
+        });
+        let previousSuccessful = 0;
+        let previousFailed = 0;
+        previousConversionStats.forEach(stat => {
+            if (stat.status === 'COMPLETED') {
+                previousSuccessful = stat._count.status;
+            }
+            else if (stat.status === 'FAILED') {
+                previousFailed = stat._count.status;
+            }
+        });
+        const previousTotalConversions = previousSuccessful + previousFailed;
+        const previousSuccessRate = previousTotalConversions === 0 ? 0 : (previousSuccessful / previousTotalConversions) * 100;
+        const successRateGrowth = previousSuccessRate === 0 ? 0 :
+            ((successRate - previousSuccessRate) / previousSuccessRate) * 100;
+        // Calculate total storage used
+        const storageResult = await database_1.default.conversion.aggregate({
+            _sum: {
+                fileSize: true
+            }
+        });
+        const totalBytes = Number(storageResult._sum.fileSize) || 0;
+        const formatFileSize = (bytes) => {
+            if (bytes === 0)
+                return { formatted: '0 Bytes', percentage: 0 };
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            const formatted = parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+            // Assume 100GB capacity for percentage calculation
+            const capacityBytes = 100 * 1024 * 1024 * 1024; // 100GB
+            const percentage = (bytes / capacityBytes) * 100;
+            return { formatted, percentage: Math.min(percentage, 100) };
+        };
+        const storageInfo = formatFileSize(totalBytes);
+        // Get previous period storage for comparison
+        const previousStorageResult = await database_1.default.conversion.aggregate({
+            _sum: {
+                fileSize: true
+            },
+            where: {
+                createdAt: {
+                    gte: previousPeriodStart,
+                    lt: startDate
+                }
+            }
+        });
+        const previousBytes = Number(previousStorageResult._sum.fileSize) || 0;
+        const storageGrowth = previousBytes === 0 ? 0 :
+            ((totalBytes - previousBytes) / previousBytes) * 100;
+        // Get failed conversions growth
+        const failedGrowth = previousFailed === 0 ? 0 :
+            ((failed - previousFailed) / previousFailed) * 100;
+        // Get most popular file type
+        const fileTypeStats = await database_1.default.conversion.groupBy({
+            by: ['toolType'],
+            where: {
+                createdAt: {
+                    gte: startDate
+                }
+            },
+            _count: {
+                toolType: true
+            },
+            orderBy: {
+                _count: {
+                    toolType: 'desc'
+                }
+            },
+            take: 1
+        });
+        let mostPopularFileType = {
+            type: 'N/A',
+            count: 0,
+            percentage: 0
+        };
+        if (fileTypeStats.length > 0) {
+            const topType = fileTypeStats[0];
+            const typeCount = topType._count.toolType;
+            const percentage = totalUploads === 0 ? 0 : (typeCount / totalUploads) * 100;
+            // Map tool type to readable name
+            const typeMapping = {
+                'pdf-to-jpg': 'PDF to Image',
+                'office-to-pdf': 'Office to PDF',
+                'pdf-to-word': 'PDF to Word',
+                'pdf-to-ppt': 'PDF to PowerPoint',
+                'pdf-to-excel': 'PDF to Excel',
+                'compress-pdf': 'PDF Compression',
+                'split-pdf': 'PDF Split',
+                'merge-pdf': 'PDF Merge'
+            };
+            mostPopularFileType = {
+                type: typeMapping[topType.toolType] || topType.toolType,
+                count: typeCount,
+                percentage: Math.round(percentage * 10) / 10
+            };
+        }
+        // Get monthly uploads for trends
+        const monthlyUploads = await database_1.default.$queryRaw `
+      SELECT 
+        DATE_TRUNC('month', created_at) as month,
+        COUNT(*) as count
+      FROM conversions 
+      WHERE created_at >= ${new Date(now.getFullYear() - 1, now.getMonth(), 1)}
+      GROUP BY DATE_TRUNC('month', created_at)
+      ORDER BY month DESC
+      LIMIT 12
+    `;
+        const transformedMonthlyUploads = monthlyUploads.map(month => ({
+            month: month.month.toISOString().slice(0, 7), // YYYY-MM format
+            count: Number(month.count)
+        }));
+        const statistics = {
+            dailyUploads: transformedDailyUploads,
+            monthlyUploads: transformedMonthlyUploads,
+            mostUploadedFileType: mostPopularFileType,
+            conversionSuccessRate: {
+                successful,
+                failed,
+                rate: Math.round(successRate * 10) / 10
+            },
+            totalStorageUsed: {
+                bytes: totalBytes,
+                formatted: storageInfo.formatted,
+                percentage: Math.round(storageInfo.percentage * 10) / 10
+            },
+            growthRates: {
+                uploads: Math.round(uploadGrowth * 10) / 10,
+                successRate: Math.round(successRateGrowth * 10) / 10,
+                failures: Math.round(failedGrowth * 10) / 10,
+                storage: Math.round(storageGrowth * 10) / 10
+            }
+        };
+        res.json({
+            success: true,
+            data: statistics
+        });
+    }
+    catch (error) {
+        console.error('❌ Failed to fetch statistics:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Failed to fetch statistics'
         });
     }
 });

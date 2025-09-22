@@ -1,9 +1,5 @@
 import { $Enums } from '@prisma/client';
 export type Role = $Enums.Role;
-export declare const Role: {
-    ADMIN: "ADMIN";
-    USER: "USER";
-};
 export interface JWTPayload {
     userId: string;
     email: string;

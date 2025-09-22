@@ -9,5 +9,5 @@ export declare const corsOptions: {
     allowedHeaders: string[];
 };
 export declare const sanitizeInput: (req: Request, res: Response, next: NextFunction) => void;
-export declare const errorHandler: (err: Error, req: Request, res: Response, next: NextFunction) => void;
+export declare const errorHandler: (err: Error, req: Request, res: Response, _next: NextFunction) => void;
 //# sourceMappingURL=security.d.ts.map

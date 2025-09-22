@@ -20,27 +20,40 @@ export class GoogleAuthService {
   } | null> {
     try {
       if (!this.client) {
+        console.error('❌ Google OAuth client not initialized. Check GOOGLE_CLIENT_ID environment variable.');
         throw new Error('Google OAuth client not initialized');
       }
 
+      console.log('🔍 Verifying Google ID token...');
       const ticket = await this.client.verifyIdToken({
         idToken,
         audience: process.env.GOOGLE_CLIENT_ID,
       });
 
       const payload = ticket.getPayload();
+      console.log('📥 Google token payload received:', { 
+        email: payload?.email, 
+        name: payload?.name,
+        sub: payload?.sub ? 'present' : 'missing'
+      });
       
       if (!payload || !payload.email || !payload.name || !payload.sub) {
+        console.error('❌ Invalid Google token payload');
         return null;
       }
 
+      console.log('✅ Google ID token verified successfully');
       return {
         email: payload.email,
         name: payload.name,
         googleId: payload.sub,
       };
-    } catch (error) {
-      console.error('Error verifying Google ID token:', error);
+    } catch (error: any) {
+      console.error('❌ Error verifying Google ID token:', {
+        message: error.message,
+        code: error.code,
+        details: error.details
+      });
       return null;
     }
   }

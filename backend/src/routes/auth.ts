@@ -6,8 +6,7 @@ import prisma from '../lib/database';
 import { 
   signupValidation, 
   loginValidation, 
-  googleAuthValidation,
-  refreshTokenValidation 
+  googleAuthValidation
 } from '../lib/validation';
 import { authenticate, AuthenticatedRequest } from '../middleware/auth';
 import { Role, Provider } from '@prisma/client';
@@ -111,6 +110,15 @@ router.post('/login', loginValidation, async (req: Request, res: Response): Prom
       return;
     }
 
+    // Check if user is blocked
+    if (user.isBlocked) {
+      res.status(403).json({
+        success: false,
+        message: 'Your account has been blocked. Please contact support.',
+      });
+      return;
+    }
+
     // Verify password
     const isValidPassword = await AuthService.comparePassword(password, user.passwordHash);
     if (!isValidPassword) {
@@ -137,6 +145,25 @@ router.post('/login', loginValidation, async (req: Request, res: Response): Prom
     // Create session
     await AuthService.createSession(user.id);
 
+    // Set HTTP-only cookies for secure token storage
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: isProduction, // Only use HTTPS in production
+      sameSite: isProduction ? 'strict' : 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/',
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/',
+    });
+
     res.json({
       success: true,
       message: 'Login successful',
@@ -147,10 +174,6 @@ router.post('/login', loginValidation, async (req: Request, res: Response): Prom
           email: user.email,
           role: user.role,
           createdAt: user.createdAt,
-        },
-        tokens: {
-          accessToken,
-          refreshToken,
         },
       },
     });
@@ -216,6 +239,15 @@ router.post('/google', googleAuthValidation, async (req: Request, res: Response)
       });
     }
 
+    // Check if user is blocked
+    if (user.isBlocked) {
+      res.status(403).json({
+        success: false,
+        message: 'Your account has been blocked. Please contact support.',
+      });
+      return;
+    }
+
     // Generate tokens
     const accessToken = AuthService.generateAccessToken({
       userId: user.id,
@@ -232,6 +264,25 @@ router.post('/google', googleAuthValidation, async (req: Request, res: Response)
     // Create session
     await AuthService.createSession(user.id);
 
+    // Set HTTP-only cookies for secure token storage
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/',
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/',
+    });
+
     res.json({
       success: true,
       message: 'Google login successful',
@@ -242,10 +293,6 @@ router.post('/google', googleAuthValidation, async (req: Request, res: Response)
           email: user.email,
           role: user.role,
           createdAt: user.createdAt,
-        },
-        tokens: {
-          accessToken,
-          refreshToken,
         },
       },
     });
@@ -259,19 +306,18 @@ router.post('/google', googleAuthValidation, async (req: Request, res: Response)
 });
 
 // Refresh token
-router.post('/refresh-token', refreshTokenValidation, async (req: Request, res: Response): Promise<void> => {
+router.post('/refresh-token', async (req: Request, res: Response): Promise<void> => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      res.status(400).json({
+    // Get refresh token from HTTP-only cookie
+    const refreshToken = req.cookies.refreshToken;
+    
+    if (!refreshToken) {
+      res.status(401).json({
         success: false,
-        message: 'Validation failed',
-        errors: errors.array(),
+        message: 'Refresh token not found',
       });
       return;
     }
-
-    const { refreshToken } = req.body;
 
     // Validate session
     const session = await AuthService.validateSession(refreshToken);
@@ -313,15 +359,28 @@ router.post('/refresh-token', refreshTokenValidation, async (req: Request, res: 
     await AuthService.revokeSession(refreshToken);
     await AuthService.createSession(user.id);
 
+    // Set new HTTP-only cookies
+    const isProduction = process.env.NODE_ENV === 'production';
+    
+    res.cookie('accessToken', newAccessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/',
+    });
+
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: isProduction ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/',
+    });
+
     res.json({
       success: true,
       message: 'Tokens refreshed successfully',
-      data: {
-        tokens: {
-          accessToken: newAccessToken,
-          refreshToken: newRefreshToken,
-        },
-      },
     });
   } catch (error) {
     console.error('Refresh token error:', error);
@@ -335,7 +394,8 @@ router.post('/refresh-token', refreshTokenValidation, async (req: Request, res: 
 // Logout
 router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Response): Promise<void> => {
   try {
-    const { refreshToken } = req.body;
+    // Get refresh token from cookie
+    const refreshToken = req.cookies.refreshToken;
 
     if (refreshToken) {
       await AuthService.revokeSession(refreshToken);
@@ -343,6 +403,21 @@ router.post('/logout', authenticate, async (req: AuthenticatedRequest, res: Resp
       // Revoke all sessions for the user
       await AuthService.revokeAllUserSessions(req.user!.userId);
     }
+
+    // Clear HTTP-only cookies
+    res.clearCookie('accessToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      path: '/',
+    });
+
+    res.clearCookie('refreshToken', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      path: '/',
+    });
 
     res.json({
       success: true,

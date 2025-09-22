@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { AuthService, JWTPayload, Role } from '../lib/auth';
+import { AuthService, Role } from '../lib/auth';
+import { Role as PrismaRole } from '@prisma/client';
 import prisma from '../lib/database';
 
-interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest extends Request {
   user?: {
     userId: string;
     email: string;
@@ -16,31 +17,45 @@ export const authenticate = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const authHeader = req.headers.authorization;
+    // Try to get token from HTTP-only cookie first, then fall back to Authorization header
+    let token = req.cookies?.accessToken;
     
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    if (!token) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7); // Remove 'Bearer ' prefix
+      }
+    }
+    
+    if (!token) {
       res.status(401).json({ 
         success: false, 
         message: 'Access token required' 
       });
       return;
     }
-
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
     
     try {
       const payload = AuthService.verifyAccessToken(token);
       
-      // Verify user still exists
+      // Verify user still exists and is not blocked
       const user = await prisma.user.findUnique({
         where: { id: payload.userId },
-        select: { id: true, email: true, role: true },
+        select: { id: true, email: true, role: true, isBlocked: true },
       });
 
       if (!user) {
         res.status(401).json({ 
           success: false, 
           message: 'User not found' 
+        });
+        return;
+      }
+
+      if (user.isBlocked) {
+        res.status(403).json({ 
+          success: false, 
+          message: 'Your account has been blocked. Please contact support.' 
         });
         return;
       }
@@ -90,8 +105,6 @@ export const authorize = (roles: Role[]) => {
   };
 };
 
-export const adminOnly = authorize([Role.ADMIN]);
-export const userOnly = authorize([Role.USER]);
-export const adminOrUser = authorize([Role.ADMIN, Role.USER]);
-
-export { AuthenticatedRequest };
+export const adminOnly = authorize([PrismaRole.ADMIN]);
+export const userOnly = authorize([PrismaRole.USER]);
+export const adminOrUser = authorize([PrismaRole.ADMIN, PrismaRole.USER]);

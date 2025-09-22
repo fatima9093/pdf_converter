@@ -38,13 +38,16 @@ router.post('/signup', validation_1.signupValidation, async (req, res) => {
         }
         // Hash password
         const passwordHash = await auth_1.AuthService.hashPassword(password);
+        // Check if user should be admin (predefined admin emails)
+        const adminEmails = ['fatimaahmad9093@gmail.com', 'admin@example.com'];
+        const userRole = adminEmails.includes(email.toLowerCase()) ? client_1.Role.ADMIN : client_1.Role.USER;
         // Create user
         const user = await database_1.default.user.create({
             data: {
                 name,
                 email,
                 passwordHash,
-                role: client_1.Role.USER,
+                role: userRole,
                 provider: client_1.Provider.EMAIL,
             },
             select: {
@@ -55,28 +58,11 @@ router.post('/signup', validation_1.signupValidation, async (req, res) => {
                 createdAt: true,
             },
         });
-        // Generate tokens
-        const accessToken = auth_1.AuthService.generateAccessToken({
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-        });
-        const refreshToken = auth_1.AuthService.generateRefreshToken({
-            userId: user.id,
-            email: user.email,
-            role: user.role,
-        });
-        // Create session
-        await auth_1.AuthService.createSession(user.id);
         res.status(201).json({
             success: true,
             message: 'User created successfully',
             data: {
                 user,
-                tokens: {
-                    accessToken,
-                    refreshToken,
-                },
             },
         });
     }
@@ -112,6 +98,14 @@ router.post('/login', validation_1.loginValidation, async (req, res) => {
             });
             return;
         }
+        // Check if user is blocked
+        if (user.isBlocked) {
+            res.status(403).json({
+                success: false,
+                message: 'Your account has been blocked. Please contact support.',
+            });
+            return;
+        }
         // Verify password
         const isValidPassword = await auth_1.AuthService.comparePassword(password, user.passwordHash);
         if (!isValidPassword) {
@@ -134,6 +128,22 @@ router.post('/login', validation_1.loginValidation, async (req, res) => {
         });
         // Create session
         await auth_1.AuthService.createSession(user.id);
+        // Set HTTP-only cookies for secure token storage
+        const isProduction = process.env.NODE_ENV === 'production';
+        res.cookie('accessToken', accessToken, {
+            httpOnly: true,
+            secure: isProduction, // Only use HTTPS in production
+            sameSite: isProduction ? 'strict' : 'lax',
+            maxAge: 15 * 60 * 1000, // 15 minutes
+            path: '/',
+        });
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? 'strict' : 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            path: '/',
+        });
         res.json({
             success: true,
             message: 'Login successful',
@@ -144,10 +154,6 @@ router.post('/login', validation_1.loginValidation, async (req, res) => {
                     email: user.email,
                     role: user.role,
                     createdAt: user.createdAt,
-                },
-                tokens: {
-                    accessToken,
-                    refreshToken,
                 },
             },
         });
@@ -187,13 +193,16 @@ router.post('/google', validation_1.googleAuthValidation, async (req, res) => {
             where: { email: googleUser.email },
         });
         if (!user) {
+            // Check if user should be admin (predefined admin emails)
+            const adminEmails = ['fatimaahmad9093@gmail.com', 'admin@example.com'];
+            const userRole = adminEmails.includes(googleUser.email.toLowerCase()) ? client_1.Role.ADMIN : client_1.Role.USER;
             // Create new user
             user = await database_1.default.user.create({
                 data: {
                     name: googleUser.name,
                     email: googleUser.email,
                     googleId: googleUser.googleId,
-                    role: client_1.Role.USER,
+                    role: userRole,
                     provider: client_1.Provider.GOOGLE,
                 },
             });
@@ -204,6 +213,14 @@ router.post('/google', validation_1.googleAuthValidation, async (req, res) => {
                 where: { id: user.id },
                 data: { googleId: googleUser.googleId },
             });
+        }
+        // Check if user is blocked
+        if (user.isBlocked) {
+            res.status(403).json({
+                success: false,
+                message: 'Your account has been blocked. Please contact support.',
+            });
+            return;
         }
         // Generate tokens
         const accessToken = auth_1.AuthService.generateAccessToken({
@@ -218,6 +235,22 @@ router.post('/google', validation_1.googleAuthValidation, async (req, res) => {
         });
         // Create session
         await auth_1.AuthService.createSession(user.id);
+        // Set HTTP-only cookies for secure token storage
+        const isProduction = process.env.NODE_ENV === 'production';
+        res.cookie('accessToken', accessToken, {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? 'strict' : 'lax',
+            maxAge: 15 * 60 * 1000, // 15 minutes
+            path: '/',
+        });
+        res.cookie('refreshToken', refreshToken, {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? 'strict' : 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            path: '/',
+        });
         res.json({
             success: true,
             message: 'Google login successful',
@@ -228,10 +261,6 @@ router.post('/google', validation_1.googleAuthValidation, async (req, res) => {
                     email: user.email,
                     role: user.role,
                     createdAt: user.createdAt,
-                },
-                tokens: {
-                    accessToken,
-                    refreshToken,
                 },
             },
         });
@@ -245,18 +274,17 @@ router.post('/google', validation_1.googleAuthValidation, async (req, res) => {
     }
 });
 // Refresh token
-router.post('/refresh-token', validation_1.refreshTokenValidation, async (req, res) => {
+router.post('/refresh-token', async (req, res) => {
     try {
-        const errors = (0, express_validator_1.validationResult)(req);
-        if (!errors.isEmpty()) {
-            res.status(400).json({
+        // Get refresh token from HTTP-only cookie
+        const refreshToken = req.cookies.refreshToken;
+        if (!refreshToken) {
+            res.status(401).json({
                 success: false,
-                message: 'Validation failed',
-                errors: errors.array(),
+                message: 'Refresh token not found',
             });
             return;
         }
-        const { refreshToken } = req.body;
         // Validate session
         const session = await auth_1.AuthService.validateSession(refreshToken);
         if (!session) {
@@ -291,15 +319,25 @@ router.post('/refresh-token', validation_1.refreshTokenValidation, async (req, r
         // Revoke old session and create new one
         await auth_1.AuthService.revokeSession(refreshToken);
         await auth_1.AuthService.createSession(user.id);
+        // Set new HTTP-only cookies
+        const isProduction = process.env.NODE_ENV === 'production';
+        res.cookie('accessToken', newAccessToken, {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? 'strict' : 'lax',
+            maxAge: 15 * 60 * 1000, // 15 minutes
+            path: '/',
+        });
+        res.cookie('refreshToken', newRefreshToken, {
+            httpOnly: true,
+            secure: isProduction,
+            sameSite: isProduction ? 'strict' : 'lax',
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+            path: '/',
+        });
         res.json({
             success: true,
             message: 'Tokens refreshed successfully',
-            data: {
-                tokens: {
-                    accessToken: newAccessToken,
-                    refreshToken: newRefreshToken,
-                },
-            },
         });
     }
     catch (error) {
@@ -313,7 +351,8 @@ router.post('/refresh-token', validation_1.refreshTokenValidation, async (req, r
 // Logout
 router.post('/logout', auth_2.authenticate, async (req, res) => {
     try {
-        const { refreshToken } = req.body;
+        // Get refresh token from cookie
+        const refreshToken = req.cookies.refreshToken;
         if (refreshToken) {
             await auth_1.AuthService.revokeSession(refreshToken);
         }
@@ -321,6 +360,19 @@ router.post('/logout', auth_2.authenticate, async (req, res) => {
             // Revoke all sessions for the user
             await auth_1.AuthService.revokeAllUserSessions(req.user.userId);
         }
+        // Clear HTTP-only cookies
+        res.clearCookie('accessToken', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            path: '/',
+        });
+        res.clearCookie('refreshToken', {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            path: '/',
+        });
         res.json({
             success: true,
             message: 'Logout successful',

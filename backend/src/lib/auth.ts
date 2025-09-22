@@ -1,4 +1,4 @@
-import jwt, { JwtPayload, TokenExpiredError, JsonWebTokenError, SignOptions } from 'jsonwebtoken';
+import jwt, { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import prisma from './database';
@@ -6,7 +6,6 @@ import { $Enums } from '@prisma/client';
 
 // Use Prisma's Role enum
 export type Role = $Enums.Role;
-export const Role = $Enums.Role;
 
 export interface JWTPayload {
   userId: string;
@@ -101,6 +100,12 @@ export class AuthService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7);
 
+    // Update user's last login time
+    await prisma.user.update({
+      where: { id: userId },
+      data: { lastLogin: new Date() },
+    });
+
     // Create session in database
     await prisma.session.create({
       data: {
@@ -147,19 +152,29 @@ export class AuthService {
       await prisma.session.delete({
         where: { refreshToken: sessionToken },
       });
-    } catch (error) {
-      // Session might not exist, which is fine
-      console.log('Session revocation note:', error);
+      console.log('✅ Session revoked successfully');
+    } catch (error: any) {
+      // Check if it's a "record not found" error (P2025)
+      if (error.code === 'P2025') {
+        console.log('ℹ️ Session already revoked or does not exist');
+        return; // This is fine, session is already gone
+      }
+      
+      // For other errors, log them properly
+      console.error('❌ Error revoking session:', error.message);
+      throw error; // Re-throw unexpected errors
     }
   }
 
   static async revokeAllUserSessions(userId: string): Promise<void> {
     try {
-      await prisma.session.deleteMany({
+      const result = await prisma.session.deleteMany({
         where: { userId },
       });
-    } catch (error) {
-      console.error('Error revoking all user sessions:', error);
+      console.log(`✅ Revoked ${result.count} sessions for user ${userId}`);
+    } catch (error: any) {
+      console.error('❌ Error revoking all user sessions:', error.message);
+      throw error; // Re-throw for proper error handling upstream
     }
   }
 

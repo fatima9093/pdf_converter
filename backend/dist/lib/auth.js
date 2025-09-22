@@ -36,13 +36,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuthService = exports.Role = void 0;
+exports.AuthService = void 0;
 const jsonwebtoken_1 = __importStar(require("jsonwebtoken"));
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const crypto_1 = __importDefault(require("crypto"));
 const database_1 = __importDefault(require("./database"));
-const client_1 = require("@prisma/client");
-exports.Role = client_1.$Enums.Role;
 class AuthService {
     // Password hashing
     static async hashPassword(password) {
@@ -115,6 +113,11 @@ class AuthService {
         // Set expiration date (7 days from now)
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 7);
+        // Update user's last login time
+        await database_1.default.user.update({
+            where: { id: userId },
+            data: { lastLogin: new Date() },
+        });
         // Create session in database
         await database_1.default.session.create({
             data: {
@@ -156,20 +159,29 @@ class AuthService {
             await database_1.default.session.delete({
                 where: { refreshToken: sessionToken },
             });
+            console.log('✅ Session revoked successfully');
         }
         catch (error) {
-            // Session might not exist, which is fine
-            console.log('Session revocation note:', error);
+            // Check if it's a "record not found" error (P2025)
+            if (error.code === 'P2025') {
+                console.log('ℹ️ Session already revoked or does not exist');
+                return; // This is fine, session is already gone
+            }
+            // For other errors, log them properly
+            console.error('❌ Error revoking session:', error.message);
+            throw error; // Re-throw unexpected errors
         }
     }
     static async revokeAllUserSessions(userId) {
         try {
-            await database_1.default.session.deleteMany({
+            const result = await database_1.default.session.deleteMany({
                 where: { userId },
             });
+            console.log(`✅ Revoked ${result.count} sessions for user ${userId}`);
         }
         catch (error) {
-            console.error('Error revoking all user sessions:', error);
+            console.error('❌ Error revoking all user sessions:', error.message);
+            throw error; // Re-throw for proper error handling upstream
         }
     }
     static async cleanExpiredSessions() {
