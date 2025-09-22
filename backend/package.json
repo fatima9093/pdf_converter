@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon src/server.ts",
-    "build": "tsc",
+    "build": "npx tsc",
     "start": "node dist/server.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
@@ -27,6 +27,7 @@
     "@prisma/client": "^5.22.0",
     "@types/archiver": "^6.0.3",
     "@types/cookie-parser": "^1.4.9",
+    "@types/node": "^24.5.2",
     "@types/nodemailer": "^7.0.1",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",
