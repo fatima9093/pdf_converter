@@ -29,8 +29,20 @@ from pdf2image import convert_from_path
 import pytesseract
 from PIL import Image
 
-# Configure Tesseract path for Windows
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+# Configure Tesseract path for cross-platform compatibility
+import platform
+import os
+
+if platform.system() == 'Windows':
+    tesseract_path = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+elif platform.system() == 'Darwin':  # macOS
+    tesseract_path = '/usr/local/bin/tesseract'
+else:  # Linux
+    tesseract_path = '/usr/bin/tesseract'
+
+# Check if tesseract exists at the platform-specific path, otherwise use system PATH
+if os.path.exists(tesseract_path):
+    pytesseract.pytesseract.tesseract_cmd = tesseract_path
 import cv2
 import numpy as np
 
