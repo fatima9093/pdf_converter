@@ -24,6 +24,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    
     "@prisma/client": "^5.22.0",
     "@types/archiver": "^6.0.3",
     "@types/cookie-parser": "^1.4.9",
@@ -47,7 +48,8 @@
     "pdf-poppler": "^0.2.1",
     "pdf2pic": "^3.2.0",
     "sharp": "^0.34.3",
-    "uuid": "^10.0.0"
+    "uuid": "^10.0.0",
+    "typescript": "^5.9.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
@@ -69,7 +71,6 @@
     "prisma": "^5.20.0",
     "supertest": "^7.1.4",
     "ts-jest": "^29.4.4",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "ts-node": "^10.9.2"
   }
 }
