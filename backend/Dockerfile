@@ -9,12 +9,8 @@ RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
-# Create Python virtual environment
-RUN python3 -m venv /venv
-ENV PATH="/venv/bin:$PATH"
-
-# Install Python dependencies inside venv
-RUN pip install --no-cache-dir \
+# Install Python dependencies globally (no venv)
+RUN pip3 install --no-cache-dir \
     pdf2image \
     pytesseract \
     python-docx \
