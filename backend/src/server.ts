@@ -453,6 +453,7 @@ async function convertPDFToJPG(inputPath: string): Promise<string[]> {
     const inputFileNameWithoutExt = path.basename(inputPath, path.extname(inputPath));
     
     console.log(`Converting ${inputFileName} to JPG...`);
+    console.log(`🖥️ Platform: ${process.platform}`);
     
     // First, get the page count to understand what we're dealing with
     try {
@@ -466,13 +467,20 @@ async function convertPDFToJPG(inputPath: string): Promise<string[]> {
       console.log('⚠️ Could not get page count with pdfinfo, proceeding with conversion...');
     }
     
-    let opts = {
+    let opts: any = {
       format: 'jpeg',
       out_dir: outputDir,
       out_prefix: inputFileNameWithoutExt,
-      page: null, // null = all pages
-      poppler_path: "/usr/bin"  
+      page: null // null = all pages
     };
+
+    // For Linux deployment (Railway), configure poppler path
+    if (process.platform === 'linux') {
+      opts.poppler_path = "/usr/bin";
+      console.log(`🐧 Linux detected - using poppler_path: ${opts.poppler_path}`);
+    } else {
+      console.log(`🖥️ Non-Linux platform detected: ${process.platform}`);
+    }
 
     // Convert all PDF pages to images using pdf-poppler
     const pdfInfo = await pdfPoppler.convert(inputPath, opts);

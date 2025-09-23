@@ -34,10 +34,18 @@ sudo systemctl start nginx
 sudo systemctl enable nginx
 ```
 
-### 1.5 Verify LibreOffice installation
+### 1.5 Install Poppler utils (required for PDF to JPG conversion)
+```bash
+sudo apt install poppler-utils -y
+```
+
+### 1.6 Verify installations
 ```bash
 soffice --version
 # Should show LibreOffice version
+
+pdftoppm -v
+# Should show Poppler version
 ```
 
 ## Step 2: Deploy Your Application

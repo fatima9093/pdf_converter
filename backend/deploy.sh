@@ -42,6 +42,7 @@ command -v node >/dev/null 2>&1 || { print_error "Node.js is required but not in
 command -v npm >/dev/null 2>&1 || { print_error "npm is required but not installed. Aborting."; exit 1; }
 command -v pm2 >/dev/null 2>&1 || { print_error "PM2 is required but not installed. Run: sudo npm install -g pm2"; exit 1; }
 command -v soffice >/dev/null 2>&1 || { print_error "LibreOffice is required but not installed. Aborting."; exit 1; }
+command -v pdftoppm >/dev/null 2>&1 || { print_error "Poppler utils are required but not installed. Aborting."; exit 1; }
 
 print_status "All required dependencies are installed"
 
