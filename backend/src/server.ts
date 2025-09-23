@@ -470,7 +470,8 @@ async function convertPDFToJPG(inputPath: string): Promise<string[]> {
       format: 'jpeg',
       out_dir: outputDir,
       out_prefix: inputFileNameWithoutExt,
-      page: null // null = all pages
+      page: null, // null = all pages
+      poppler_path: "/usr/bin"  
     };
 
     // Convert all PDF pages to images using pdf-poppler

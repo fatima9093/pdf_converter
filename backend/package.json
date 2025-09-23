@@ -24,7 +24,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    
     "@prisma/client": "^5.22.0",
     "@types/archiver": "^6.0.3",
     "@types/cookie-parser": "^1.4.9",
@@ -48,8 +47,8 @@
     "pdf-poppler": "^0.2.1",
     "pdf2pic": "^3.2.0",
     "sharp": "^0.34.3",
-    "uuid": "^10.0.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "uuid": "^10.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

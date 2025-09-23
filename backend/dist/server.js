@@ -25,6 +25,55 @@ const auth_2 = require("./middleware/auth");
 const auth_3 = require("./lib/auth");
 const database_1 = __importDefault(require("./lib/database"));
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
+// Cross-platform Python executable detection
+async function findPythonExecutable() {
+    const pythonExecutables = [
+        'python',
+        'python3',
+        'py'
+    ];
+    // Add platform-specific paths
+    if (process.platform === 'win32') {
+        pythonExecutables.unshift('C:\\Python\\python.exe');
+        pythonExecutables.unshift('C:\\Python39\\python.exe');
+        pythonExecutables.unshift('C:\\Python310\\python.exe');
+        pythonExecutables.unshift('C:\\Python311\\python.exe');
+        pythonExecutables.unshift('C:\\Python312\\python.exe');
+        pythonExecutables.unshift('C:\\Python313\\python.exe');
+    }
+    else {
+        pythonExecutables.unshift('/usr/bin/python3');
+        pythonExecutables.unshift('/usr/local/bin/python3');
+        pythonExecutables.unshift('/opt/python3/bin/python3');
+    }
+    for (const exe of pythonExecutables) {
+        try {
+            if (path_1.default.isAbsolute(exe)) {
+                // Full path - check if file exists
+                if (await fs_extra_1.default.pathExists(exe)) {
+                    return exe;
+                }
+            }
+            else {
+                // Command name - test if it's available
+                try {
+                    await execAsync(`${exe} --version`, { timeout: 5000 });
+                    return exe;
+                }
+                catch {
+                    // Continue to next executable
+                    continue;
+                }
+            }
+        }
+        catch {
+            // Continue to next executable
+            continue;
+        }
+    }
+    // Fallback to 'python' if nothing else works
+    return 'python';
+}
 // Utility function to log system events
 async function logSystemEvent(params) {
     try {
@@ -582,8 +631,8 @@ async function convertPDFToWordWithPdf2docx(inputPath) {
             throw new Error(`PDF to Word converter script not found: ${converterScriptPath}`);
         }
         // Prepare Python command for text-based PDF conversion
-        // Use full Python path to avoid PATH issues
-        const pythonExecutable = 'C:\\Users\\taaee\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
+        // Use cross-platform Python detection
+        const pythonExecutable = await findPythonExecutable();
         const pythonCommand = `"${pythonExecutable}" "${converterScriptPath}" "${inputPath}" "${outputFilePath}"`;
         console.log(`🔧 Executing pdf2docx conversion: ${pythonCommand}`);
         const { stdout, stderr } = await execAsync(pythonCommand, {
@@ -681,31 +730,7 @@ async function convertPDFToPowerPointLayoutPreserving(inputPath) {
         // Prepare Python command for layout-preserving converter
         const pythonScript = path_1.default.join(__dirname, '..', 'ocr-service', 'pdf_to_ppt_layout_preserving.py');
         // Try different Python executables in order of preference
-        const pythonExecutables = [
-            'C:\\Users\\taaee\\AppData\\Local\\Programs\\Python\\Python313\\python.exe',
-            'python',
-            'python3',
-            'py'
-        ];
-        let pythonExecutable = 'python';
-        for (const exe of pythonExecutables) {
-            try {
-                if (exe.includes(':\\')) {
-                    // Full path - check if file exists
-                    if (await fs_extra_1.default.pathExists(exe)) {
-                        pythonExecutable = exe;
-                        break;
-                    }
-                }
-                else {
-                    // Command name - use as is (will be tested during execution)
-                    pythonExecutable = exe;
-                }
-            }
-            catch {
-                continue;
-            }
-        }
+        const pythonExecutable = await findPythonExecutable();
         const command = `"${pythonExecutable}" "${pythonScript}" "${inputPath}" "${outputFilePath}"`;
         console.log(`🐍 Executing layout-preserving Python converter: ${command}`);
         try {
@@ -755,8 +780,8 @@ async function convertPDFWithOCR(inputPath, outputFormat) {
             throw new Error(`OCR script not found: ${ocrScriptPath}`);
         }
         // Prepare Python command (using tesseract as it's more reliable)
-        // Use full Python path to avoid PATH issues
-        const pythonExecutable = 'C:\\Users\\taaee\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
+        // Use cross-platform Python detection
+        const pythonExecutable = await findPythonExecutable();
         const pythonCommand = `"${pythonExecutable}" "${ocrScriptPath}" "${inputPath}" "${outputFilePath}" --format ${outputFormat} --ocr-engine tesseract --dpi 200`;
         console.log(`🔧 Executing OCR: ${pythonCommand}`);
         // Clean environment to avoid LibreOffice Python conflicts
@@ -830,8 +855,8 @@ async function convertPDFToWordWithOCR(inputPath) {
             throw new Error(`PDF to Word converter script not found: ${converterScriptPath}`);
         }
         // Prepare Python command for scanned PDF conversion with enhanced OCR
-        // Use full Python path to avoid PATH issues
-        const pythonExecutable = 'C:\\Users\\taaee\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
+        // Use cross-platform Python detection
+        const pythonExecutable = await findPythonExecutable();
         const pythonCommand = `"${pythonExecutable}" "${converterScriptPath}" "${inputPath}" "${outputFilePath}" --is-scanned --dpi 300`;
         console.log(`🔧 Executing advanced OCR + layout reconstruction + font detection: ${pythonCommand}`);
         // Clean environment to avoid LibreOffice Python conflicts
@@ -903,8 +928,8 @@ async function convertPDFToExcelProfessional(inputPath) {
         if (!await fs_extra_1.default.pathExists(converterScriptPath)) {
             throw new Error(`Professional PDF converter script not found: ${converterScriptPath}`);
         }
-        // Use the correct Python executable
-        const pythonExecutable = 'C:\\Users\\taaee\\AppData\\Local\\Programs\\Python\\Python313\\python.exe';
+        // Use cross-platform Python detection
+        const pythonExecutable = await findPythonExecutable();
         const pythonCommand = `"${pythonExecutable}" "${converterScriptPath}" "${inputPath}" "${outputFilePath}" --verbose`;
         console.log(`🔧 Executing professional PDF to Excel conversion: ${pythonCommand}`);
         // Clean environment to avoid LibreOffice Python conflicts
