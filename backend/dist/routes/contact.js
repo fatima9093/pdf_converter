@@ -83,7 +83,7 @@ router.post('/contact', contactRateLimit, validateContactForm, async (req, res) 
         // Log the contact form submission
         console.log(`Contact form submitted: ${contact.id} from ${email}`);
         // Send email notification to admin (don't wait for it to complete)
-        emailService_1.emailService.sendContactFormNotification(contact).catch(error => {
+        emailService_1.emailService.sendContactFormNotification(contact).catch((error) => {
             console.error('Failed to send contact form email notification:', error);
             // Don't fail the request if email sending fails
         });
@@ -178,4 +178,3 @@ router.put('/contact/:id/status', async (req, res) => {
     }
 });
 exports.default = router;
-//# sourceMappingURL=contact.js.map

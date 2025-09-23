@@ -92,7 +92,7 @@ router.post('/contact', contactRateLimit, validateContactForm, async (req: Reque
     console.log(`Contact form submitted: ${contact.id} from ${email}`);
 
     // Send email notification to admin (don't wait for it to complete)
-    emailService.sendContactFormNotification(contact).catch(error => {
+    emailService.sendContactFormNotification(contact).catch((error: any) => {
       console.error('Failed to send contact form email notification:', error);
       // Don't fail the request if email sending fails
     });

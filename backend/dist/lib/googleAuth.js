@@ -52,4 +52,3 @@ class GoogleAuthService {
 exports.GoogleAuthService = GoogleAuthService;
 // Initialize on import
 GoogleAuthService.initialize();
-//# sourceMappingURL=googleAuth.js.map

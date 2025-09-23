@@ -215,4 +215,3 @@ AuthService.JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-ch
 AuthService.JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'your-super-secret-refresh-key-change-this-in-production';
 AuthService.JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
 AuthService.JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
-//# sourceMappingURL=auth.js.map

@@ -92,4 +92,3 @@ exports.authorize = authorize;
 exports.adminOnly = (0, exports.authorize)([client_1.Role.ADMIN]);
 exports.userOnly = (0, exports.authorize)([client_1.Role.USER]);
 exports.adminOrUser = (0, exports.authorize)([client_1.Role.ADMIN, client_1.Role.USER]);
-//# sourceMappingURL=auth.js.map

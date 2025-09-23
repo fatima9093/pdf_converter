@@ -38,4 +38,3 @@ exports.refreshTokenValidation = [
         .notEmpty()
         .withMessage('Refresh token is required'),
 ];
-//# sourceMappingURL=validation.js.map

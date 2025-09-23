@@ -2464,4 +2464,3 @@ app.listen(PORT, () => {
     console.log('🔄 PDF to JPG conversion available with Poppler + Sharp pipeline');
 });
 exports.default = app;
-//# sourceMappingURL=server.js.map

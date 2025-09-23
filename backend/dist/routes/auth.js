@@ -422,4 +422,3 @@ router.get('/me', auth_2.authenticate, async (req, res) => {
     }
 });
 exports.default = router;
-//# sourceMappingURL=auth.js.map

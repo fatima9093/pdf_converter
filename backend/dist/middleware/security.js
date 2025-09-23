@@ -147,4 +147,3 @@ const errorHandler = (err, req, res, _next // eslint-disable-line @typescript-es
     });
 };
 exports.errorHandler = errorHandler;
-//# sourceMappingURL=security.js.map

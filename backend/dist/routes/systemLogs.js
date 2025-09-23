@@ -341,4 +341,3 @@ router.post('/admin/logs/test', auth_1.authenticate, auth_1.adminOnly, async (re
     }
 });
 exports.default = router;
-//# sourceMappingURL=systemLogs.js.map
