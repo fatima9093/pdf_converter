@@ -1,15 +1,15 @@
-FROM node:18-alpine
+FROM node:18-slim
 
 # Install system dependencies
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y \
     poppler-utils \
     libreoffice \
     python3 \
-    py3-pip \
+    python3-pip \
     tesseract-ocr \
-    bash
+    && rm -rf /var/lib/apt/lists/*
 
-# Create and activate virtual environment
+# Create Python virtual environment
 RUN python3 -m venv /venv
 ENV PATH="/venv/bin:$PATH"
 
@@ -31,24 +31,19 @@ RUN tesseract --version
 
 WORKDIR /app
 
-# Copy package files first (better caching for Node deps)
+# Copy package files first for caching
 COPY package*.json ./
-
-# Install Node.js dependencies
 RUN npm ci --omit=dev
 
-# Copy only necessary files
+# Copy source code
 COPY src/ ./src/
 COPY prisma/ ./prisma/
 COPY ocr-service/ ./ocr-service/
 COPY tsconfig.json ./
 COPY ecosystem.config.js ./
 
-# Build Node.js application
+# Build Node.js app
 RUN npm run build
 
-# Expose port
 EXPOSE 3002
-
-# Start app
 CMD ["npm", "start"]
