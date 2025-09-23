@@ -412,9 +412,34 @@ async function convertPDFToJPG(inputPath) {
             console.log(`🖥️ Non-Linux platform detected: ${process.platform}`);
         }
         // Convert all PDF pages to images using pdf-poppler
-        const pdfInfo = await pdf_poppler_1.default.convert(inputPath, opts);
-        console.log("✅ PDF pages converted via Poppler");
-        console.log("🔍 Poppler conversion info:", pdfInfo);
+        let pdfInfo;
+        try {
+            pdfInfo = await pdf_poppler_1.default.convert(inputPath, opts);
+            console.log("✅ PDF pages converted via Poppler");
+            console.log("🔍 Poppler conversion info:", pdfInfo);
+        }
+        catch (popplerError) {
+            console.error("❌ pdf-poppler failed:", popplerError.message);
+            // If it's the Linux not supported error, try with system poppler directly
+            if (popplerError.message && popplerError.message.includes("linux is NOT supported")) {
+                console.log("🔄 Falling back to direct system poppler commands...");
+                // Use direct system commands as fallback
+                const { stdout } = await execAsync(`pdfinfo "${inputPath}"`);
+                const pageMatch = stdout.match(/Pages:\s*(\d+)/);
+                const pageCount = pageMatch ? parseInt(pageMatch[1]) : 1;
+                console.log(`📊 PDF has ${pageCount} page(s), converting with direct poppler...`);
+                // Convert each page individually using pdftoppm
+                for (let page = 1; page <= pageCount; page++) {
+                    const outputFile = path_1.default.join(outputDir, `${inputFileNameWithoutExt}-${page}.jpg`);
+                    await execAsync(`pdftoppm -jpeg -f ${page} -l ${page} "${inputPath}" "${outputDir}/${inputFileNameWithoutExt}-${page}"`);
+                    console.log(`✅ Converted page ${page}/${pageCount}`);
+                }
+                pdfInfo = { pages: pageCount };
+            }
+            else {
+                throw popplerError; // Re-throw if it's a different error
+            }
+        }
         // Get the number of pages by checking the generated files
         const files = await fs_extra_1.default.readdir(outputDir);
         console.log("🗂️ All files in output directory:", files);
