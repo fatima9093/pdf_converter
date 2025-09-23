@@ -6,11 +6,12 @@ RUN apt-get update && apt-get install -y \
     libreoffice \
     python3 \
     python3-pip \
+    python3-venv \
     tesseract-ocr \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies globally (no venv)
-RUN pip3 install --no-cache-dir \
+# Install Python dependencies (override managed env issue)
+RUN pip3 install --no-cache-dir --break-system-packages \
     pdf2image \
     pytesseract \
     python-docx \
