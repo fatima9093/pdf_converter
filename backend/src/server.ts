@@ -467,35 +467,27 @@ async function convertPDFToJPG(inputPath: string): Promise<string[]> {
       console.log('⚠️ Could not get page count with pdfinfo, proceeding with conversion...');
     }
     
-    let opts: any = {
-      format: 'jpeg',
-      out_dir: outputDir,
-      out_prefix: inputFileNameWithoutExt,
-      page: null // null = all pages
-    };
-
-    // For Linux deployment (Railway), configure poppler path
-    if (process.platform === 'linux') {
-      opts.poppler_path = "/usr/bin";
-      console.log(`🐧 Linux detected - using poppler_path: ${opts.poppler_path}`);
-    } else {
-      console.log(`🖥️ Non-Linux platform detected: ${process.platform}`);
+    // Only configure pdf-poppler options for non-Linux platforms
+    let opts: any = {};
+    if (process.platform !== 'linux') {
+      opts = {
+        format: 'jpeg',
+        out_dir: outputDir,
+        out_prefix: inputFileNameWithoutExt,
+        page: null // null = all pages
+      };
+      console.log(`🖥️ Non-Linux platform detected: ${process.platform} - using pdf-poppler`);
     }
 
-    // Convert all PDF pages to images using pdf-poppler
+    // Convert all PDF pages to images
     let pdfInfo;
-    try {
-      pdfInfo = await pdfPoppler.convert(inputPath, opts);
-      console.log("✅ PDF pages converted via Poppler");
-      console.log("🔍 Poppler conversion info:", pdfInfo);
-    } catch (popplerError: any) {
-      console.error("❌ pdf-poppler failed:", popplerError.message);
+    
+    // On Linux, always use direct system commands to avoid pdf-poppler issues
+    if (process.platform === 'linux') {
+      console.log("🐧 Linux detected - using direct system poppler commands...");
       
-      // If it's the Linux not supported error, try with system poppler directly
-      if (popplerError.message && popplerError.message.includes("linux is NOT supported")) {
-        console.log("🔄 Falling back to direct system poppler commands...");
-        
-        // Use direct system commands as fallback
+      try {
+        // Get page count
         const { stdout } = await execAsync(`pdfinfo "${inputPath}"`);
         const pageMatch = stdout.match(/Pages:\s*(\d+)/);
         const pageCount = pageMatch ? parseInt(pageMatch[1]) : 1;
@@ -504,14 +496,28 @@ async function convertPDFToJPG(inputPath: string): Promise<string[]> {
         
         // Convert each page individually using pdftoppm
         for (let page = 1; page <= pageCount; page++) {
-          const outputFile = path.join(outputDir, `${inputFileNameWithoutExt}-${page}.jpg`);
           await execAsync(`pdftoppm -jpeg -f ${page} -l ${page} "${inputPath}" "${outputDir}/${inputFileNameWithoutExt}-${page}"`);
           console.log(`✅ Converted page ${page}/${pageCount}`);
         }
         
         pdfInfo = { pages: pageCount };
-      } else {
-        throw popplerError; // Re-throw if it's a different error
+        console.log("✅ PDF pages converted via direct system poppler");
+        
+      } catch (systemError) {
+        console.error("❌ Direct system poppler failed:", systemError);
+        throw new Error(`PDF conversion failed on Linux: ${systemError}`);
+      }
+    } else {
+      // On non-Linux platforms, use pdf-poppler
+      console.log(`🖥️ Non-Linux platform (${process.platform}) - using pdf-poppler...`);
+      
+      try {
+        pdfInfo = await pdfPoppler.convert(inputPath, opts);
+        console.log("✅ PDF pages converted via pdf-poppler");
+        console.log("🔍 Poppler conversion info:", pdfInfo);
+      } catch (popplerError: any) {
+        console.error("❌ pdf-poppler failed:", popplerError.message);
+        throw popplerError;
       }
     }
 

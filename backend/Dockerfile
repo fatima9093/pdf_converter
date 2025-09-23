@@ -34,6 +34,9 @@ COPY package*.json ./
 # Install ALL dependencies (including dev dependencies for TypeScript compilation)
 RUN npm ci
 
+# ✅ Force install pdf-poppler (bypasses "linux is NOT supported" warning)
+RUN npm install pdf-poppler --force
+
 # Copy source code
 COPY src/ ./src/
 COPY prisma/ ./prisma/
