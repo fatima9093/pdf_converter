@@ -16,6 +16,11 @@
     "sourceMap": false,
     "noEmitOnError": false,
     "noImplicitAny": false,
+    "noImplicitReturns": false,
+    "noImplicitThis": false,
+    "strictNullChecks": false,
+    "strictFunctionTypes": false,
+    "strictPropertyInitialization": false,
     "baseUrl": ".",
     "paths": {
       "*": ["node_modules/*", "src/*"]
