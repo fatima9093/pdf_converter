@@ -1,14 +1,20 @@
 FROM node:18-alpine
 
-# Install essential system dependencies only
+# Install system dependencies
 RUN apk add --no-cache \
     poppler-utils \
     libreoffice \
     python3 \
-    py3-pip
+    py3-pip \
+    tesseract-ocr \
+    bash
 
-# Install minimal Python dependencies
-RUN pip3 install --no-cache-dir \
+# Create and activate virtual environment
+RUN python3 -m venv /venv
+ENV PATH="/venv/bin:$PATH"
+
+# Install Python dependencies inside venv
+RUN pip install --no-cache-dir \
     pdf2image \
     pytesseract \
     python-docx \
@@ -21,10 +27,11 @@ RUN pip3 install --no-cache-dir \
 # Verify installations
 RUN which pdftoppm && pdftoppm -v
 RUN python3 --version
+RUN tesseract --version
 
 WORKDIR /app
 
-# Copy package files first for better caching
+# Copy package files first (better caching for Node deps)
 COPY package*.json ./
 
 # Install Node.js dependencies
@@ -37,10 +44,11 @@ COPY ocr-service/ ./ocr-service/
 COPY tsconfig.json ./
 COPY ecosystem.config.js ./
 
-# Build the application
+# Build Node.js application
 RUN npm run build
 
 # Expose port
 EXPOSE 3002
 
+# Start app
 CMD ["npm", "start"]
