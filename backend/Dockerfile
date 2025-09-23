@@ -30,7 +30,9 @@ WORKDIR /app
 
 # Copy package files first for caching
 COPY package*.json ./
-RUN npm ci --omit=dev
+
+# Install ALL dependencies (including dev dependencies for TypeScript compilation)
+RUN npm ci
 
 # Copy source code
 COPY src/ ./src/
@@ -42,8 +44,11 @@ COPY ecosystem.config.js ./
 # ✅ Generate Prisma client
 RUN npx prisma generate
 
-# Build Node.js app
+# Build the TypeScript application
 RUN npm run build
+
+# Remove dev dependencies after build to reduce image size
+RUN npm prune --omit=dev
 
 EXPOSE 3002
 CMD ["npm", "start"]
