@@ -8,7 +8,7 @@ const express_validator_1 = require("express-validator");
 const client_1 = require("@prisma/client");
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 // @ts-ignore - Temporary fix for module resolution
-const emailService_1 = require("../lib/emailService");
+const lib_1 = require("../lib");
 const router = express_1.default.Router();
 const prisma = new client_1.PrismaClient();
 // Rate limiting for contact form - 5 submissions per 15 minutes per IP
@@ -84,7 +84,7 @@ router.post('/contact', contactRateLimit, validateContactForm, async (req, res) 
         // Log the contact form submission
         console.log(`Contact form submitted: ${contact.id} from ${email}`);
         // Send email notification to admin (don't wait for it to complete)
-        emailService_1.emailService.sendContactFormNotification(contact).catch((error) => {
+        lib_1.emailService.sendContactFormNotification(contact).catch((error) => {
             console.error('Failed to send contact form email notification:', error);
             // Don't fail the request if email sending fails
         });
