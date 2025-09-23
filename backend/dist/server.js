@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -11,8 +44,6 @@ const path_1 = __importDefault(require("path"));
 const fs_extra_1 = __importDefault(require("fs-extra"));
 const child_process_1 = require("child_process");
 const util_1 = require("util");
-// @ts-ignore - pdf-poppler doesn't have TypeScript declarations
-const pdf_poppler_1 = __importDefault(require("pdf-poppler"));
 const sharp_1 = __importDefault(require("sharp"));
 const archiver_1 = __importDefault(require("archiver"));
 // Authentication imports
@@ -25,6 +56,13 @@ const auth_2 = require("./middleware/auth");
 const auth_3 = require("./lib/auth");
 const database_1 = __importDefault(require("./lib/database"));
 const execAsync = (0, util_1.promisify)(child_process_1.exec);
+// Dynamic import for pdf-poppler (only on non-Linux platforms)
+async function loadPdfPoppler() {
+    if (process.platform === 'linux') {
+        throw new Error('pdf-poppler not available on Linux');
+    }
+    return await Promise.resolve().then(() => __importStar(require('pdf-poppler')));
+}
 // Cross-platform Python executable detection
 async function findPythonExecutable() {
     const pythonExecutables = [
@@ -436,7 +474,8 @@ async function convertPDFToJPG(inputPath) {
             // On non-Linux platforms, use pdf-poppler
             console.log(`🖥️ Non-Linux platform (${process.platform}) - using pdf-poppler...`);
             try {
-                pdfInfo = await pdf_poppler_1.default.convert(inputPath, opts);
+                const pdfPoppler = await loadPdfPoppler();
+                pdfInfo = await pdfPoppler.default.convert(inputPath, opts);
                 console.log("✅ PDF pages converted via pdf-poppler");
                 console.log("🔍 Poppler conversion info:", pdfInfo);
             }

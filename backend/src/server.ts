@@ -6,8 +6,6 @@ import path from 'path';
 import fs from 'fs-extra';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-// @ts-ignore - pdf-poppler doesn't have TypeScript declarations
-import pdfPoppler from 'pdf-poppler';
 import sharp from 'sharp';
 import archiver from 'archiver';
 
@@ -30,6 +28,14 @@ import { AuthService } from './lib/auth';
 import prisma from './lib/database';
 
 const execAsync = promisify(exec);
+
+// Dynamic import for pdf-poppler (only on non-Linux platforms)
+async function loadPdfPoppler() {
+  if (process.platform === 'linux') {
+    throw new Error('pdf-poppler not available on Linux');
+  }
+  return await import('pdf-poppler');
+}
 
 // Cross-platform Python executable detection
 async function findPythonExecutable(): Promise<string> {
@@ -512,7 +518,8 @@ async function convertPDFToJPG(inputPath: string): Promise<string[]> {
       console.log(`🖥️ Non-Linux platform (${process.platform}) - using pdf-poppler...`);
       
       try {
-        pdfInfo = await pdfPoppler.convert(inputPath, opts);
+        const pdfPoppler = await loadPdfPoppler();
+        pdfInfo = await pdfPoppler.default.convert(inputPath, opts);
         console.log("✅ PDF pages converted via pdf-poppler");
         console.log("🔍 Poppler conversion info:", pdfInfo);
       } catch (popplerError: any) {
