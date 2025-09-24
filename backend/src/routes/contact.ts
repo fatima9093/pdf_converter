@@ -2,8 +2,7 @@ import express, { Request, Response } from 'express';
 import { body, validationResult } from 'express-validator';
 import { PrismaClient, ContactSubject } from '@prisma/client';
 import rateLimit from 'express-rate-limit';
-// @ts-ignore - Temporary fix for module resolution
-import { emailService } from '../lib';
+import { emailService } from '../lib/emailService';
 const router = express.Router();
 const prisma = new PrismaClient();
 
