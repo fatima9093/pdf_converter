@@ -44,8 +44,7 @@ COPY ocr-service/ ./ocr-service/
 COPY tsconfig.json ./
 COPY ecosystem.config.js ./
 
-# Fix file permissions
-RUN chmod -R 755 src/
+
 
 # ✅ Generate Prisma client
 RUN npx prisma generate
