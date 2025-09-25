@@ -7,6 +7,27 @@ const express_1 = __importDefault(require("express"));
 const auth_1 = require("../middleware/auth");
 const database_1 = __importDefault(require("../lib/database"));
 const router = express_1.default.Router();
+// Helper function to convert frontend enum values to database enum values
+const convertLogType = (frontendType) => {
+    const typeMapping = {
+        'conversion_error': 'CONVERSION_ERROR',
+        'login_failure': 'LOGIN_FAILURE',
+        'system_error': 'SYSTEM_ERROR',
+        'security_alert': 'SECURITY_ALERT',
+        'user_action': 'USER_ACTION',
+        'api_error': 'API_ERROR'
+    };
+    return typeMapping[frontendType] || frontendType.toUpperCase();
+};
+const convertLogSeverity = (frontendSeverity) => {
+    const severityMapping = {
+        'low': 'LOW',
+        'medium': 'MEDIUM',
+        'high': 'HIGH',
+        'critical': 'CRITICAL'
+    };
+    return severityMapping[frontendSeverity] || frontendSeverity.toUpperCase();
+};
 // Get system logs with filtering and pagination (admin only)
 router.get('/admin/logs', auth_1.authenticate, auth_1.adminOnly, async (req, res) => {
     try {
@@ -14,10 +35,10 @@ router.get('/admin/logs', auth_1.authenticate, auth_1.adminOnly, async (req, res
         // Build where clause for filtering
         const where = {};
         if (type && type !== 'all') {
-            where.type = type;
+            where.type = convertLogType(type);
         }
         if (severity && severity !== 'all') {
-            where.severity = severity;
+            where.severity = convertLogSeverity(severity);
         }
         if (search) {
             where.OR = [

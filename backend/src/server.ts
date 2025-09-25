@@ -2736,7 +2736,7 @@ app.get('/api/statistics', async (req: AuthenticatedRequest, res) => {
     const failedGrowth = previousFailed === 0 ? 0 : 
       ((failed - previousFailed) / previousFailed) * 100;
 
-    // Get most popular file type
+    // Get all file type statistics
     const fileTypeStats = await prisma.conversion.groupBy({
       by: ['toolType'],
       where: {
@@ -2751,8 +2751,31 @@ app.get('/api/statistics', async (req: AuthenticatedRequest, res) => {
         _count: {
           toolType: 'desc'
         }
-      },
-      take: 1
+      }
+    });
+
+    // Map tool type to readable name
+    const typeMapping: { [key: string]: string } = {
+      'pdf-to-jpg': 'PDF to Image',
+      'office-to-pdf': 'Office to PDF',
+      'pdf-to-word': 'PDF to Word',
+      'pdf-to-ppt': 'PDF to PowerPoint',
+      'pdf-to-excel': 'PDF to Excel',
+      'compress-pdf': 'PDF Compression',
+      'split-pdf': 'PDF Split',
+      'merge-pdf': 'PDF Merge'
+    };
+
+    // Transform all file type statistics
+    const allFileTypes = fileTypeStats.map(stat => {
+      const count = Number(stat._count.toolType);
+      const percentage = totalUploads === 0 ? 0 : (count / totalUploads) * 100;
+      
+      return {
+        type: typeMapping[stat.toolType] || stat.toolType,
+        count,
+        percentage: Math.round(percentage * 10) / 10
+      };
     });
 
     let mostPopularFileType = {
@@ -2761,28 +2784,8 @@ app.get('/api/statistics', async (req: AuthenticatedRequest, res) => {
       percentage: 0
     };
 
-    if (fileTypeStats.length > 0) {
-      const topType = fileTypeStats[0];
-      const typeCount = topType._count.toolType;
-      const percentage = totalUploads === 0 ? 0 : (typeCount / totalUploads) * 100;
-      
-      // Map tool type to readable name
-      const typeMapping: { [key: string]: string } = {
-        'pdf-to-jpg': 'PDF to Image',
-        'office-to-pdf': 'Office to PDF',
-        'pdf-to-word': 'PDF to Word',
-        'pdf-to-ppt': 'PDF to PowerPoint',
-        'pdf-to-excel': 'PDF to Excel',
-        'compress-pdf': 'PDF Compression',
-        'split-pdf': 'PDF Split',
-        'merge-pdf': 'PDF Merge'
-      };
-
-      mostPopularFileType = {
-        type: typeMapping[topType.toolType] || topType.toolType,
-        count: typeCount,
-        percentage: Math.round(percentage * 10) / 10
-      };
+    if (allFileTypes.length > 0) {
+      mostPopularFileType = allFileTypes[0];
     }
 
     // Get monthly uploads for trends
@@ -2806,6 +2809,7 @@ app.get('/api/statistics', async (req: AuthenticatedRequest, res) => {
       dailyUploads: transformedDailyUploads,
       monthlyUploads: transformedMonthlyUploads,
       mostUploadedFileType: mostPopularFileType,
+      allFileTypes: allFileTypes,
       conversionSuccessRate: {
         successful,
         failed,

@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshToken = useCallback(async (): Promise<boolean> => {
     try {
-      const response = await fetch(`http://localhost:3002/api/auth/refresh-token`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/auth/refresh-token`, {
         method: 'POST',
         credentials: 'include', // Use HTTP-only cookies
         headers: {
@@ -55,7 +55,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyTokenAndSetUser = useCallback(async () => {
     try {
-      const response = await fetch(`http://localhost:3002/api/auth/me`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/auth/me`, {
         credentials: 'include', // Use HTTP-only cookies
         headers: {
           'Content-Type': 'application/json',
@@ -106,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<{ success: boolean; message?: string; user?: User }> => {
     try {
-      const response = await fetch(`http://localhost:3002/api/auth/login`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/auth/login`, {
         method: 'POST',
         credentials: 'include', // Use HTTP-only cookies
         headers: {
@@ -140,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signup = async (name: string, email: string, password: string): Promise<{ success: boolean; message?: string }> => {
     try {
-      const response = await fetch(`http://localhost:3002/api/auth/signup`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/auth/signup`, {
         method: 'POST',
         credentials: 'include', // Use HTTP-only cookies
         headers: {
@@ -165,7 +165,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const googleLogin = async (idToken: string): Promise<{ success: boolean; message?: string; user?: User }> => {
     try {
-      const response = await fetch(`http://localhost:3002/api/auth/google`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/auth/google`, {
         method: 'POST',
         credentials: 'include', // Use HTTP-only cookies
         headers: {
@@ -201,7 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async (): Promise<void> => {
     try {
-      await fetch(`http://localhost:3002/api/auth/logout`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/auth/logout`, {
         method: 'POST',
         credentials: 'include', // Use HTTP-only cookies
         headers: {

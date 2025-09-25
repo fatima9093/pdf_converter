@@ -4,6 +4,29 @@ import prisma from '../lib/database';
 
 const router = express.Router();
 
+// Helper function to convert frontend enum values to database enum values
+const convertLogType = (frontendType: string): string => {
+  const typeMapping: Record<string, string> = {
+    'conversion_error': 'CONVERSION_ERROR',
+    'login_failure': 'LOGIN_FAILURE',
+    'system_error': 'SYSTEM_ERROR',
+    'security_alert': 'SECURITY_ALERT',
+    'user_action': 'USER_ACTION',
+    'api_error': 'API_ERROR'
+  };
+  return typeMapping[frontendType] || frontendType.toUpperCase();
+};
+
+const convertLogSeverity = (frontendSeverity: string): string => {
+  const severityMapping: Record<string, string> = {
+    'low': 'LOW',
+    'medium': 'MEDIUM',
+    'high': 'HIGH',
+    'critical': 'CRITICAL'
+  };
+  return severityMapping[frontendSeverity] || frontendSeverity.toUpperCase();
+};
+
 // Get system logs with filtering and pagination (admin only)
 router.get('/admin/logs', authenticate, adminOnly, async (req, res) => {
   try {
@@ -21,11 +44,11 @@ router.get('/admin/logs', authenticate, adminOnly, async (req, res) => {
     const where: any = {};
 
     if (type && type !== 'all') {
-      where.type = type;
+      where.type = convertLogType(type as string);
     }
 
     if (severity && severity !== 'all') {
-      where.severity = severity;
+      where.severity = convertLogSeverity(severity as string);
     }
 
     if (search) {
@@ -348,44 +371,5 @@ router.get('/admin/logs/stats', authenticate, adminOnly, async (req, res) => {
   }
 });
 
-// Test endpoint to create sample logs (for debugging pagination)
-router.post('/admin/logs/test', authenticate, adminOnly, async (req, res) => {
-  try {
-    const testLogs = [];
-    
-    // Create 25 test logs with different types and severities
-    for (let i = 1; i <= 25; i++) {
-      const logTypes = ['CONVERSION_ERROR', 'LOGIN_FAILURE', 'SYSTEM_ERROR', 'SECURITY_ALERT', 'USER_ACTION', 'API_ERROR'];
-      const severities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-      
-      const log = await prisma.systemLog.create({
-        data: {
-          type: logTypes[i % logTypes.length] as any,
-          message: `Test log message ${i}`,
-          details: `This is test log details for log number ${i}. It contains some additional information for testing purposes.`,
-          severity: severities[i % severities.length] as any,
-          userEmail: i % 3 === 0 ? `testuser${i}@example.com` : null,
-          ipAddress: `192.168.1.${i % 255}`,
-          userAgent: `Mozilla/5.0 (Test Browser ${i})`
-        }
-      });
-      
-      testLogs.push(log);
-    }
-
-    res.json({
-      success: true,
-      message: `Created ${testLogs.length} test logs`,
-      data: { count: testLogs.length }
-    });
-
-  } catch (error) {
-    console.error('Failed to create test logs:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to create test logs'
-    });
-  }
-});
 
 export default router;

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, 
   Filter, 
@@ -32,6 +32,36 @@ export default function SystemLogs() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalLogs, setTotalLogs] = useState(0);
   const logsPerPage = 10;
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showSeverityDropdown, setShowSeverityDropdown] = useState(false);
+  const typeDropdownRef = useRef<HTMLDivElement>(null);
+  const severityDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdowns when clicking outside or pressing Escape
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (typeDropdownRef.current && !typeDropdownRef.current.contains(event.target as Node)) {
+        setShowTypeDropdown(false);
+      }
+      if (severityDropdownRef.current && !severityDropdownRef.current.contains(event.target as Node)) {
+        setShowSeverityDropdown(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowTypeDropdown(false);
+        setShowSeverityDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // Fetch system logs from API
   const fetchLogs = async () => {
@@ -52,7 +82,34 @@ export default function SystemLogs() {
       params.append('limit', logsPerPage.toString());
       params.append('offset', ((currentPage - 1) * logsPerPage).toString());
 
-      const response = await fetch(`/api/admin/logs?${params.toString()}`);
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/admin/logs?${params.toString()}`;
+      
+      const response = await fetch(apiUrl, {
+        method: 'GET',
+        credentials: 'include', // Include HTTP-only cookies for authentication
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('API Request URL:', apiUrl);
+      console.log('Response Status:', response.status);
+      console.log('Response Headers:', Object.fromEntries(response.headers.entries()));
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          setError('Authentication required. Please log in as an administrator.');
+          setLogs([]);
+          return;
+        }
+        if (response.status === 403) {
+          setError('Access denied. Administrator privileges required.');
+          setLogs([]);
+          return;
+        }
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
       const result = await response.json();
 
       console.log('API Response:', result);
@@ -78,7 +135,11 @@ export default function SystemLogs() {
       }
     } catch (error) {
       console.error('Error fetching logs:', error);
-      setError('Network error. Please check your connection and try again.');
+      if (error instanceof Error) {
+        setError(`Network error: ${error.message}`);
+      } else {
+        setError('Network error. Please check your connection and try again.');
+      }
       setLogs([]);
     } finally {
       setLoading(false);
@@ -154,13 +215,28 @@ export default function SystemLogs() {
   const handleDeleteLogs = async (logIds: string[]) => {
     if (confirm(`Are you sure you want to delete ${logIds.length} log entries? This action cannot be undone.`)) {
       try {
-        const response = await fetch('/api/admin/logs', {
+        const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/admin/logs`;
+        
+        const response = await fetch(apiUrl, {
           method: 'DELETE',
+          credentials: 'include', // Include HTTP-only cookies for authentication
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({ logIds })
         });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            alert('Authentication required. Please log in as an administrator.');
+            return;
+          }
+          if (response.status === 403) {
+            alert('Access denied. Administrator privileges required.');
+            return;
+          }
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
 
         const result = await response.json();
 
@@ -170,11 +246,15 @@ export default function SystemLogs() {
           setSelectedLogs([]);
         } else {
           console.error('Failed to delete logs:', result.error);
-          alert('Failed to delete logs. Please try again.');
+          alert(`Failed to delete logs: ${result.error}`);
         }
       } catch (error) {
         console.error('Error deleting logs:', error);
-        alert('Failed to delete logs. Please try again.');
+        if (error instanceof Error) {
+          alert(`Failed to delete logs: ${error.message}`);
+        } else {
+          alert('Failed to delete logs. Please try again.');
+        }
       }
     }
   };
@@ -282,43 +362,150 @@ export default function SystemLogs() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          .mobile-select-system {
+            font-size: 16px !important;
+            -webkit-appearance: none !important;
+            -moz-appearance: none !important;
+            appearance: none !important;
+          }
+          
+          @media screen and (max-width: 640px) {
+            .mobile-select-system {
+              font-size: 16px !important;
+              height: 44px !important;
+              line-height: 1.2 !important;
+              padding: 8px 32px 8px 12px !important;
+            }
+            
+            .mobile-select-system option {
+              padding: 6px 8px !important;
+              font-size: 16px !important;
+              line-height: 1.2 !important;
+              background-color: white !important;
+              color: black !important;
+              height: 32px !important;
+              min-height: 32px !important;
+              max-height: 32px !important;
+              border: none !important;
+              margin: 0 !important;
+              display: block !important;
+            }
+            
+            .mobile-select-system:focus {
+              font-size: 16px !important;
+              outline: none !important;
+            }
+            
+            /* Force smaller dropdown on mobile */
+            .mobile-select-system[size] {
+              height: auto !important;
+              max-height: 200px !important;
+              overflow-y: auto !important;
+            }
+            
+            /* iOS Safari specific overrides */
+            @supports (-webkit-touch-callout: none) {
+              .mobile-select-system {
+                -webkit-appearance: none !important;
+                background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='m6 8 4 4 4-4'/%3e%3c/svg%3e") !important;
+                background-position: right 8px center !important;
+                background-repeat: no-repeat !important;
+                background-size: 16px 16px !important;
+              }
+              
+              .mobile-select-system option {
+                font-size: 16px !important;
+                padding: 8px !important;
+                line-height: 1.2 !important;
+                height: 32px !important;
+                -webkit-appearance: none !important;
+              }
+            }
+          }
+          
+          /* Additional mobile-specific overrides */
+          @media screen and (max-width: 480px) {
+            .mobile-select-system {
+              font-size: 16px !important;
+              padding: 8px 28px 8px 40px !important;
+              height: 44px !important;
+            }
+            
+            .mobile-select-system option {
+              font-size: 16px !important;
+              padding: 6px 8px !important;
+              height: 30px !important;
+              min-height: 30px !important;
+            }
+          }
+          
+          .mobile-dropdown {
+            max-width: calc(100vw - 2rem) !important;
+            left: 0 !important;
+            right: 0 !important;
+            position: absolute !important;
+            animation: slideDown 0.15s ease-out;
+            border-radius: 0.5rem !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+          }
+          
+          @keyframes slideDown {
+            from {
+              opacity: 0;
+              transform: translateY(-4px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          
+          .mobile-dropdown button {
+            min-height: 44px !important;
+            display: flex !important;
+            align-items: center !important;
+            width: 100% !important;
+            text-align: left !important;
+          }
+          
+          @media screen and (max-width: 640px) {
+            .mobile-dropdown {
+              max-height: 40vh !important;
+              overflow-y: auto !important;
+              -webkit-overflow-scrolling: touch !important;
+            }
+            
+            .mobile-dropdown button {
+              padding: 12px 16px !important;
+              font-size: 16px !important;
+            }
+          }
+        `
+      }} />
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="space-y-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">System Logs</h2>
-          <p className="text-gray-600">Monitor system events, errors, and security alerts</p>
+          <h2 className="text-lg sm:text-2xl font-bold text-gray-900">System Logs</h2>
+          <p className="text-sm sm:text-base text-gray-600">Monitor system events, errors, and security alerts</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-col gap-2">
           <button
             onClick={exportLogs}
-            className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="flex items-center justify-center px-3 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
           >
-            <Download className="w-4 h-4 mr-2" />
+            <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Export
           </button>
           <button
             onClick={fetchLogs}
-            className="flex items-center px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-primary-hover"
+            className="flex items-center justify-center px-3 py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
+            <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Refresh
-          </button>
-          <button
-            onClick={async () => {
-              // Create some test logs for debugging
-              try {
-                const response = await fetch('/api/admin/logs/test', { method: 'POST' });
-                const result = await response.json();
-                console.log('Test logs created:', result);
-                await fetchLogs();
-              } catch (error) {
-                console.error('Failed to create test logs:', error);
-              }
-            }}
-            className="flex items-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-100 border border-blue-300 rounded-lg hover:bg-blue-200"
-          >
-            Create Test Logs
           </button>
         </div>
       </div>
@@ -364,69 +551,156 @@ export default function SystemLogs() {
       </div>
 
       {/* Filters and Search */}
-      <div className="flex flex-col lg:flex-row gap-4">
-        <div className="flex-1 relative">
+      <div className="space-y-3">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search logs by message, details, or user..."
+            placeholder="Search logs..."
             value={searchTerm}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-black"
+            className="w-full pl-10 pr-4 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black bg-white"
+            style={{ fontSize: '16px' }}
           />
         </div>
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <select
-              value={filterType}
-              onChange={(e) => handleFilterChange(e.target.value as typeof filterType)}
-              className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent appearance-none bg-white text-black"
+        <div className="flex flex-col space-y-3 sm:space-y-0 sm:grid sm:grid-cols-2 sm:gap-3">
+          {/* Custom Filter Type Dropdown */}
+          <div className="relative" ref={typeDropdownRef}>
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
+            <button
+              onClick={() => {
+                setShowTypeDropdown(!showTypeDropdown);
+                setShowSeverityDropdown(false);
+              }}
+              className="w-full pl-10 pr-10 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-black cursor-pointer text-left flex items-center justify-between"
+              style={{ fontSize: '16px' }}
             >
-              <option value="all">All Types</option>
-              <option value="conversion_error">Conversion Errors</option>
-              <option value="login_failure">Login Failures</option>
-              <option value="system_error">System Errors</option>
-              <option value="security_alert">Security Alerts</option>
-              <option value="user_action">User Actions</option>
-              <option value="api_error">API Errors</option>
-            </select>
+              <span className="truncate">
+                {filterType === 'all' ? 'All Types' :
+                 filterType === 'conversion_error' ? 'Conversion Errors' :
+                 filterType === 'login_failure' ? 'Login Failures' :
+                 filterType === 'system_error' ? 'System Errors' :
+                 filterType === 'security_alert' ? 'Security Alerts' :
+                 filterType === 'user_action' ? 'User Actions' :
+                 filterType === 'api_error' ? 'API Errors' : 'All Types'}
+              </span>
+              <svg 
+                className={`w-4 h-4 transition-transform duration-200 ${showTypeDropdown ? 'rotate-180' : ''}`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {showTypeDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto mobile-dropdown">
+                {[
+                  { value: 'all', label: 'All Types' },
+                  { value: 'conversion_error', label: 'Conversion Errors' },
+                  { value: 'login_failure', label: 'Login Failures' },
+                  { value: 'system_error', label: 'System Errors' },
+                  { value: 'security_alert', label: 'Security Alerts' },
+                  { value: 'user_action', label: 'User Actions' },
+                  { value: 'api_error', label: 'API Errors' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      handleFilterChange(option.value as typeof filterType);
+                      setShowTypeDropdown(false);
+                    }}
+                    className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      filterType === option.value ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                    }`}
+                    style={{ fontSize: '16px' }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
           </div>
-          <div className="relative">
-            <select
-              value={filterSeverity}
-              onChange={(e) => handleSeverityChange(e.target.value as typeof filterSeverity)}
-              className="pl-4 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent appearance-none bg-white text-black"
+            )}
+          </div>
+
+          {/* Custom Filter Severity Dropdown */}
+          <div className="relative" ref={severityDropdownRef}>
+            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
+            <button
+              onClick={() => {
+                setShowSeverityDropdown(!showSeverityDropdown);
+                setShowTypeDropdown(false);
+              }}
+              className="w-full pl-10 pr-10 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-black cursor-pointer text-left flex items-center justify-between"
+              style={{ fontSize: '16px' }}
             >
-              <option value="all" className="text-black">All Severities</option>
-              <option value="critical" className="text-black">Critical</option>
-              <option value="high" className="text-black">High</option>
-              <option value="medium" className="text-black">Medium</option>
-              <option value="low" className="text-black">Low</option>
-            </select>
+              <span className="truncate">
+                {filterSeverity === 'all' ? 'All Severities' :
+                 filterSeverity === 'critical' ? 'Critical' :
+                 filterSeverity === 'high' ? 'High' :
+                 filterSeverity === 'medium' ? 'Medium' :
+                 filterSeverity === 'low' ? 'Low' : 'All Severities'}
+              </span>
+              <svg 
+                className={`w-4 h-4 transition-transform duration-200 ${showSeverityDropdown ? 'rotate-180' : ''}`} 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            
+            {showSeverityDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto mobile-dropdown">
+                {[
+                  { value: 'all', label: 'All Severities' },
+                  { value: 'critical', label: 'Critical' },
+                  { value: 'high', label: 'High' },
+                  { value: 'medium', label: 'Medium' },
+                  { value: 'low', label: 'Low' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      handleSeverityChange(option.value as typeof filterSeverity);
+                      setShowSeverityDropdown(false);
+                    }}
+                    className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      filterSeverity === option.value ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                    }`}
+                    style={{ fontSize: '16px' }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Bulk Actions */}
       {selectedLogs.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-red-900">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+          <div className="space-y-3">
+            <div className="text-sm font-medium text-red-900 text-center sm:text-left">
               {selectedLogs.length} log(s) selected
-            </span>
-            <button
-              onClick={() => handleDeleteLogs(selectedLogs)}
-              className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200"
-            >
-              Delete Selected
-            </button>
+            </div>
+            <div className="flex justify-center">
+              <button
+                onClick={() => handleDeleteLogs(selectedLogs)}
+                className="px-3 py-2 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200"
+              >
+                Delete Selected
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Logs Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      {/* Logs Table - Desktop View */}
+      <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -442,7 +716,7 @@ export default function SystemLogs() {
                         setSelectedLogs([]);
                       }
                     }}
-                    className="rounded border-gray-300 text-primary focus:ring-primary"
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -479,7 +753,7 @@ export default function SystemLogs() {
                           setSelectedLogs(selectedLogs.filter(id => id !== log.id));
                         }
                       }}
-                      className="rounded border-gray-300 text-primary focus:ring-primary"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                     />
                   </td>
                   <td className="px-6 py-4">
@@ -526,7 +800,7 @@ export default function SystemLogs() {
                     <div className="flex items-center justify-end space-x-2">
                       <button
                         onClick={() => setShowLogDetails(log.id)}
-                        className="p-1 text-gray-400 hover:text-primary rounded"
+                        className="p-1 text-gray-400 hover:text-blue-600 rounded"
                         title="View Details"
                       >
                         <Eye className="w-4 h-4" />
@@ -550,6 +824,88 @@ export default function SystemLogs() {
           <div className="text-center py-12">
             <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-500">No logs found matching your criteria</p>
+          </div>
+        )}
+      </div>
+
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {filteredLogs.map((log) => (
+          <div key={log.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+            {/* Header with checkbox, log icon, type, and actions */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  checked={selectedLogs.includes(log.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedLogs([...selectedLogs, log.id]);
+                    } else {
+                      setSelectedLogs(selectedLogs.filter(id => id !== log.id));
+                    }
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <div className="flex-shrink-0">
+                  {getLogIcon(log.type, log.severity)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900">{getTypeLabel(log.type)}</div>
+                  <div className="text-xs text-gray-500">{log.message}</div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-1">
+                <button
+                  onClick={() => setShowLogDetails(log.id)}
+                  className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
+                  title="View Details"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDeleteLogs([log.id])}
+                  className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                  title="Delete Log"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            
+            {/* Log details - stacked vertically for mobile */}
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Severity:</span>
+                {getSeverityBadge(log.severity)}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">User:</span>
+                <span className="font-medium">{log.userEmail || 'System'}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Time:</span>
+                <div className="text-right">
+                  <div>{log.timestamp.toLocaleDateString()}</div>
+                  <div className="text-gray-500">{log.timestamp.toLocaleTimeString()}</div>
+                </div>
+              </div>
+              {log.details && (
+                <div className="text-xs text-gray-600" title={log.details}>
+                  {log.details.length > 50 
+                    ? `${log.details.substring(0, 50)}...` 
+                    : log.details
+                  }
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {filteredLogs.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
+            <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500 text-sm">No logs found matching your criteria</p>
           </div>
         )}
       </div>
@@ -645,61 +1001,74 @@ export default function SystemLogs() {
       )}
 
       {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <div className="text-sm text-gray-700">
+      <div className="space-y-3">
+        <div className="text-xs sm:text-sm text-gray-700 text-center sm:text-left">
           Showing {((currentPage - 1) * logsPerPage) + 1} to {Math.min(currentPage * logsPerPage, totalLogs)} of {totalLogs} logs
           <div className="text-xs text-gray-500 mt-1">
             Debug: Page {currentPage} of {totalPages} | Logs per page: {logsPerPage}
           </div>
         </div>
-        <div className="flex items-center space-x-2">
-          <button 
-            onClick={handlePreviousPage}
-            disabled={currentPage === 1}
-            className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Previous
-          </button>
-          
-          {/* Page numbers */}
+        <div className="flex items-center justify-center sm:justify-end">
           <div className="flex items-center space-x-1">
-            {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-              let pageNum;
-              if (totalPages <= 5) {
-                pageNum = i + 1;
-              } else if (currentPage <= 3) {
-                pageNum = i + 1;
-              } else if (currentPage >= totalPages - 2) {
-                pageNum = totalPages - 4 + i;
-              } else {
-                pageNum = currentPage - 2 + i;
-              }
-              
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => handlePageChange(pageNum)}
-                  className={`px-3 py-2 text-sm font-medium rounded-md ${
-                    currentPage === pageNum
-                      ? 'text-white bg-primary border border-transparent'
-                      : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
+            <button 
+              onClick={handlePreviousPage}
+              disabled={currentPage === 1}
+              className={`px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border rounded-md ${
+                currentPage === 1
+                  ? 'text-gray-300 bg-gray-100 border-gray-200 cursor-not-allowed'
+                  : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <span className="hidden sm:inline">Previous</span>
+              <span className="sm:hidden">Prev</span>
+            </button>
+            
+            {/* Page numbers - simplified for mobile */}
+            <div className="flex items-center space-x-1">
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                let pageNum;
+                if (totalPages <= 5) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNum = totalPages - 4 + i;
+                } else {
+                  pageNum = currentPage - 2 + i;
+                }
+                
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => handlePageChange(pageNum)}
+                    className={`px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border rounded-md ${
+                      currentPage === pageNum
+                        ? 'text-white bg-blue-600 border-blue-600'
+                        : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            
+            <button 
+              onClick={handleNextPage}
+              disabled={currentPage === totalPages}
+              className={`px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border rounded-md ${
+                currentPage === totalPages
+                  ? 'text-gray-300 bg-gray-100 border-gray-200 cursor-not-allowed'
+                  : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <span className="hidden sm:inline">Next</span>
+              <span className="sm:hidden">Next</span>
+            </button>
           </div>
-          
-          <button 
-            onClick={handleNextPage}
-            disabled={currentPage === totalPages}
-            className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Next
-          </button>
         </div>
       </div>
     </div>
+    </>
   );
 }

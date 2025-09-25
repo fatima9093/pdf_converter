@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { 
   Users, 
   FileText, 
@@ -10,7 +11,8 @@ import {
   Menu,
   X,
   AlertCircle,
-  Shield
+  Shield,
+  Home
 } from 'lucide-react';
 
 interface AdminLayoutProps {
@@ -27,6 +29,7 @@ export default function AdminLayout({
   adminName = 'Admin User' 
 }: AdminLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const router = useRouter();
 
   const menuItems = [
     {
@@ -64,6 +67,10 @@ export default function AdminLayout({
   const handleLogout = () => {
     // Implement logout logic
     window.location.href = '/login';
+  };
+
+  const handleGoHome = () => {
+    router.push('/');
   };
 
   return (
@@ -169,12 +176,21 @@ export default function AdminLayout({
         {/* Top Bar */}
         <header className="bg-white shadow-sm border-b border-gray-200 lg:hidden">
           <div className="flex items-center justify-between h-16 px-4">
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+              >
+                <Menu className="w-6 h-6" />
+              </button>
+              <button
+                onClick={handleGoHome}
+                className="p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100"
+                title="Go to Main Page"
+              >
+                <Home className="w-4 h-4" />
+              </button>
+            </div>
             
               <div className="flex items-center space-x-3">
                 <span className="text-sm font-medium text-gray-900">{adminName}</span>
@@ -191,13 +207,22 @@ export default function AdminLayout({
         {/* Desktop Top Bar */}
         <header className="hidden lg:block bg-white shadow-sm border-b border-gray-200">
           <div className="flex items-center justify-between h-16 px-6">
-            <div>
-              <h1 className="text-xl font-semibold text-gray-900">
-                {menuItems.find(item => item.id === activeTab)?.name || 'Dashboard'}
-              </h1>
-              <p className="text-sm text-gray-500">
-                {menuItems.find(item => item.id === activeTab)?.description || 'Manage your system'}
-              </p>
+            <div className="flex items-center space-x-4">
+              <button
+                onClick={handleGoHome}
+                className="p-2 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors duration-200"
+                title="Go to Main Page"
+              >
+                <Home className="w-4 h-4" />
+              </button>
+              <div>
+                <h1 className="text-xl font-semibold text-gray-900">
+                  {menuItems.find(item => item.id === activeTab)?.name || 'Dashboard'}
+                </h1>
+                <p className="text-sm text-gray-500">
+                  {menuItems.find(item => item.id === activeTab)?.description || 'Manage your system'}
+                </p>
+              </div>
             </div>
             
             <div className="flex items-center space-x-4">

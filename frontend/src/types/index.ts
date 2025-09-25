@@ -99,6 +99,11 @@ export interface DashboardStatistics {
     count: number;
     percentage: number;
   };
+  allFileTypes: {
+    type: string;
+    count: number;
+    percentage: number;
+  }[];
   conversionSuccessRate: {
     successful: number;
     failed: number;

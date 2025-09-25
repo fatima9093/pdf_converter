@@ -27,6 +27,7 @@ export default function AdminSettingsComponent() {
   // const [editingApiKey, setEditingApiKey] = useState<string | null>(null);
   const [newApiKey, setNewApiKey] = useState({ name: '', key: '', service: '' });
   const [newAdmin, setNewAdmin] = useState({ email: '', name: '', permissions: [] as string[] });
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Mock data - replace with actual API call
   useEffect(() => {
@@ -220,7 +221,8 @@ export default function AdminSettingsComponent() {
 
       {/* Tabs */}
       <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+        {/* Desktop Navigation */}
+        <nav className="hidden sm:flex -mb-px space-x-8">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -229,18 +231,68 @@ export default function AdminSettingsComponent() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as 'file' | 'api' | 'admin' | 'system')}
-                className={`flex items-center py-2 px-1 border-b-2 font-medium text-sm ${
+                className={`flex items-center py-2 px-1 border-b-2 font-medium text-sm whitespace-nowrap ${
                   isActive
                     ? 'border-primary text-primary'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                 }`}
               >
                 <Icon className="w-4 h-4 mr-2" />
-                {tab.name}
+                <span className="hidden md:inline">{tab.name}</span>
+                <span className="md:hidden">{tab.name.split(' ')[0]}</span>
               </button>
             );
           })}
         </nav>
+        
+        {/* Mobile Dropdown */}
+        <div className="sm:hidden relative">
+          <button
+            onClick={() => setShowMobileMenu(!showMobileMenu)}
+            className="w-full flex items-center justify-between py-2 px-3 text-left bg-white border border-gray-300 rounded-lg"
+          >
+            <div className="flex items-center">
+              {(() => {
+                const activeTabData = tabs.find(tab => tab.id === activeTab);
+                const Icon = activeTabData?.icon || Settings;
+                return (
+                  <>
+                    <Icon className="w-4 h-4 mr-2" />
+                    {activeTabData?.name || 'Select Tab'}
+                  </>
+                );
+              })()}
+            </div>
+            <svg className={`w-4 h-4 transition-transform ${showMobileMenu ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {showMobileMenu && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-10">
+              {tabs.map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id as 'file' | 'api' | 'admin' | 'system');
+                      setShowMobileMenu(false);
+                    }}
+                    className={`w-full flex items-center py-3 px-4 text-left hover:bg-gray-50 ${
+                      isActive ? 'bg-primary-50 text-primary' : 'text-gray-700'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 mr-3" />
+                {tab.name}
+              </button>
+            );
+          })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tab Content */}
@@ -253,7 +305,7 @@ export default function AdminSettingsComponent() {
                 File Upload Settings
               </h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Maximum File Size (MB)
@@ -268,7 +320,7 @@ export default function AdminSettingsComponent() {
                         maxSizeMB: parseInt(e.target.value) || 0
                       }
                     })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Current: {settings.fileSize.maxSizeMB} MB
@@ -279,9 +331,9 @@ export default function AdminSettingsComponent() {
 
             <div>
               <h4 className="text-md font-semibold text-gray-900 mb-3">Supported File Types</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                 {['.docx', '.xlsx', '.pptx', '.pdf', '.jpg', '.png', '.txt', '.csv', '.rtf', '.odt'].map((fileType) => (
-                  <label key={fileType} className="flex items-center">
+                  <label key={fileType} className="flex items-center cursor-pointer">
                     <input
                       type="checkbox"
                       checked={settings.supportedFileTypes.includes(fileType)}
@@ -307,11 +359,11 @@ export default function AdminSettingsComponent() {
               <div className="space-y-4">
                 {settings.apiKeys.map((apiKey, index) => (
                   <div key={index} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <h4 className="font-medium text-gray-900">{apiKey.name}</h4>
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                          <h4 className="font-medium text-gray-900 truncate">{apiKey.name}</h4>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium self-start ${
                             apiKey.isActive 
                               ? 'bg-green-100 text-green-800' 
                               : 'bg-gray-100 text-gray-800'
@@ -320,9 +372,10 @@ export default function AdminSettingsComponent() {
                           </span>
                         </div>
                         <p className="text-sm text-gray-500 mt-1">Service: {apiKey.service}</p>
-                        <div className="flex items-center mt-2">
-                          <span className="text-sm text-gray-700 mr-2">Key:</span>
-                          <code className="text-sm bg-gray-100 px-2 py-1 rounded">
+                        <div className="flex flex-col sm:flex-row sm:items-center mt-2 gap-2">
+                          <span className="text-sm text-gray-700">Key:</span>
+                          <div className="flex items-center flex-1 min-w-0">
+                            <code className="text-sm bg-gray-100 px-2 py-1 rounded flex-1 truncate">
                             {showApiKey[index] ? apiKey.key : '••••••••••••••••'}
                           </code>
                           <button
@@ -330,16 +383,17 @@ export default function AdminSettingsComponent() {
                               ...showApiKey,
                               [index]: !showApiKey[index]
                             })}
-                            className="ml-2 p-1 text-gray-400 hover:text-gray-600"
+                              className="ml-2 p-1 text-gray-400 hover:text-gray-600 flex-shrink-0"
                           >
                             {showApiKey[index] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
+                      </div>
+                      <div className="flex flex-row sm:flex-col lg:flex-row items-center gap-2 sm:gap-1 lg:gap-2">
                         <button
                           onClick={() => handleToggleApiKey(index)}
-                          className={`px-3 py-1 text-xs font-medium rounded ${
+                          className={`px-3 py-1 text-xs font-medium rounded whitespace-nowrap ${
                             apiKey.isActive
                               ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
                               : 'bg-green-100 text-green-800 hover:bg-green-200'
@@ -362,32 +416,32 @@ export default function AdminSettingsComponent() {
               {/* Add New API Key */}
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-3">Add New API Key</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   <input
                     type="text"
                     placeholder="Service name"
                     value={newApiKey.name}
                     onChange={(e) => setNewApiKey({ ...newApiKey, name: e.target.value })}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                   <input
                     type="text"
                     placeholder="Service type"
                     value={newApiKey.service}
                     onChange={(e) => setNewApiKey({ ...newApiKey, service: e.target.value })}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                   <input
                     type="password"
                     placeholder="API Key"
                     value={newApiKey.key}
                     onChange={(e) => setNewApiKey({ ...newApiKey, key: e.target.value })}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm sm:col-span-2 lg:col-span-1"
                   />
                 </div>
                 <button
                   onClick={handleAddApiKey}
-                  className="mt-3 flex items-center px-4 py-2 text-sm font-medium text-primary bg-primary-600/5 rounded-lg hover:bg-primary-600/10"
+                  className="mt-3 w-full sm:w-auto flex items-center justify-center px-4 py-2 text-sm font-medium text-primary bg-primary-600/5 rounded-lg hover:bg-primary-600/10"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add API Key
@@ -408,17 +462,17 @@ export default function AdminSettingsComponent() {
               <div className="space-y-4">
                 {settings.adminAccounts.map((admin) => (
                   <div key={admin.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <h4 className="font-medium text-gray-900">{admin.name}</h4>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-600/10 text-primary">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                          <h4 className="font-medium text-gray-900 truncate">{admin.name}</h4>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-600/10 text-primary self-start">
                             Administrator
                           </span>
                         </div>
-                        <p className="text-sm text-gray-500 mt-1">{admin.email}</p>
-                        <div className="flex items-center mt-2 space-x-4">
-                          <div>
+                        <p className="text-sm text-gray-500 mt-1 break-all">{admin.email}</p>
+                        <div className="flex flex-col lg:flex-row lg:items-center mt-2 gap-4">
+                          <div className="flex-1">
                             <span className="text-sm text-gray-700">Permissions:</span>
                             <div className="flex flex-wrap gap-1 mt-1">
                               {admin.permissions.map((permission) => (
@@ -432,7 +486,7 @@ export default function AdminSettingsComponent() {
                             </div>
                           </div>
                           {admin.lastLogin && (
-                            <div>
+                            <div className="flex-shrink-0">
                               <span className="text-sm text-gray-700">Last Login:</span>
                               <p className="text-sm text-gray-500">
                                 {admin.lastLogin.toLocaleDateString()}
@@ -443,7 +497,7 @@ export default function AdminSettingsComponent() {
                       </div>
                       <button
                         onClick={() => handleDeleteAdmin(admin.id)}
-                        className="p-1 text-gray-400 hover:text-red-600"
+                        className="p-1 text-gray-400 hover:text-red-600 self-start sm:self-center"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -455,27 +509,27 @@ export default function AdminSettingsComponent() {
               {/* Add New Admin */}
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
                 <h4 className="font-medium text-gray-900 mb-3">Add New Administrator</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
                   <input
                     type="email"
                     placeholder="Email address"
                     value={newAdmin.email}
                     onChange={(e) => setNewAdmin({ ...newAdmin, email: e.target.value })}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                   <input
                     type="text"
                     placeholder="Full name"
                     value={newAdmin.name}
                     onChange={(e) => setNewAdmin({ ...newAdmin, name: e.target.value })}
-                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                 </div>
                 <div className="mb-3">
                   <label className="block text-sm font-medium text-gray-700 mb-2">Permissions</label>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
                     {['users', 'files', 'stats', 'logs', 'settings', 'all'].map((permission) => (
-                      <label key={permission} className="flex items-center">
+                      <label key={permission} className="flex items-center cursor-pointer">
                         <input
                           type="checkbox"
                           checked={newAdmin.permissions.includes(permission)}
@@ -501,7 +555,7 @@ export default function AdminSettingsComponent() {
                 </div>
                 <button
                   onClick={handleAddAdmin}
-                  className="flex items-center px-4 py-2 text-sm font-medium text-primary bg-primary-600/5 rounded-lg hover:bg-primary-600/10"
+                  className="w-full sm:w-auto flex items-center justify-center px-4 py-2 text-sm font-medium text-primary bg-primary-600/5 rounded-lg hover:bg-primary-600/10"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Add Administrator
@@ -519,7 +573,7 @@ export default function AdminSettingsComponent() {
                 System Configuration
               </h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Max Concurrent Conversions
@@ -534,7 +588,7 @@ export default function AdminSettingsComponent() {
                         maxConcurrentConversions: parseInt(e.target.value) || 1
                       }
                     })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Number of files that can be processed simultaneously
@@ -555,7 +609,7 @@ export default function AdminSettingsComponent() {
                         retentionDays: parseInt(e.target.value) || 1
                       }
                     })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     How long to keep converted files before deletion
@@ -564,8 +618,8 @@ export default function AdminSettingsComponent() {
               </div>
 
               <div className="pt-4 border-t border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <div className="flex-1">
                     <h4 className="font-medium text-gray-900">Maintenance Mode</h4>
                     <p className="text-sm text-gray-500">
                       Temporarily disable file conversions for maintenance
@@ -579,7 +633,7 @@ export default function AdminSettingsComponent() {
                         maintenanceMode: !settings.systemSettings.maintenanceMode
                       }
                     })}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors self-start sm:self-center ${
                       settings.systemSettings.maintenanceMode ? 'bg-red-600' : 'bg-gray-200'
                     }`}
                   >

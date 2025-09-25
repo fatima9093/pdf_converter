@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Search, 
   Filter, 
@@ -25,6 +25,30 @@ export default function UserManagement() {
   // const [showUserDetails, setShowUserDetails] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [usersPerPage] = useState(10);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const statusDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside or pressing Escape
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (statusDropdownRef.current && !statusDropdownRef.current.contains(event.target as Node)) {
+        setShowStatusDropdown(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowStatusDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   // Fetch users from API
   useEffect(() => {
@@ -34,15 +58,23 @@ export default function UserManagement() {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002'}/api/admin/users`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3002';
+      console.log('Fetching users from:', `${apiUrl}/api/admin/users`);
+      
+      const response = await fetch(`${apiUrl}/api/admin/users`, {
         credentials: 'include', // Use HTTP-only cookies instead of localStorage
         headers: {
           'Content-Type': 'application/json',
         },
       });
 
+      console.log('Response status:', response.status);
+      console.log('Response ok:', response.ok);
+
       if (response.ok) {
         const data = await response.json();
+        console.log('Response data:', data);
+        
         if (data.success) {
           // Transform backend data to match frontend types
           const transformedUsers: AdminUser[] = data.data.users.map((user: AdminUser) => ({
@@ -58,12 +90,27 @@ export default function UserManagement() {
             isBlocked: user.isBlocked || false,
           }));
           setUsers(transformedUsers);
+        } else {
+          console.error('API returned success: false', data.message);
         }
       } else {
-        console.error('Failed to fetch users');
+        const errorText = await response.text();
+        console.error('Failed to fetch users. Status:', response.status, 'Error:', errorText);
+        
+        if (response.status === 0) {
+          console.error('Network error - Backend server might not be running');
+        } else if (response.status === 401) {
+          console.error('Unauthorized - User might not be authenticated or session expired');
+        } else if (response.status === 403) {
+          console.error('Forbidden - User might not have admin privileges');
+        }
       }
     } catch (error) {
       console.error('Error fetching users:', error);
+      
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.error('Network error - Backend server might not be running on port 3002');
+      }
     } finally {
       setLoading(false);
     }
@@ -256,92 +303,187 @@ export default function UserManagement() {
   }
 
   return (
-    <div className="space-y-6">
+    <>
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          .users-dropdown {
+            max-width: calc(100vw - 2rem) !important;
+            left: 0 !important;
+            right: 0 !important;
+            position: absolute !important;
+            animation: slideDown 0.15s ease-out;
+            border-radius: 0.5rem !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+          }
+          
+          @keyframes slideDown {
+            from {
+              opacity: 0;
+              transform: translateY(-4px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+          
+          .users-dropdown button {
+            min-height: 44px !important;
+            display: flex !important;
+            align-items: center !important;
+            width: 100% !important;
+            text-align: left !important;
+          }
+          
+          .users-dropdown-container {
+            overflow: visible !important;
+          }
+          
+          @media screen and (max-width: 640px) {
+            .users-dropdown {
+              max-height: 40vh !important;
+              overflow-y: auto !important;
+              -webkit-overflow-scrolling: touch !important;
+              left: -0.5rem !important;
+              right: -0.5rem !important;
+              max-width: calc(100vw - 1rem) !important;
+            }
+            
+            .users-dropdown button {
+              padding: 12px 16px !important;
+              font-size: 16px !important;
+              min-height: 48px !important;
+            }
+          }
+          
+          @media screen and (max-width: 480px) {
+            .users-dropdown {
+              left: -1rem !important;
+              right: -1rem !important;
+              max-width: calc(100vw - 0.5rem) !important;
+            }
+          }
+        `
+      }} />
+    <div className="space-y-4 sm:space-y-6 px-2 sm:px-0">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="space-y-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">User Management</h2>
-          <p className="text-gray-600">Manage user accounts and permissions</p>
+          <h2 className="text-lg sm:text-2xl font-bold text-gray-900">User Management</h2>
+          <p className="text-sm sm:text-base text-gray-600">Manage user accounts and permissions</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-col xs:flex-row gap-2">
           <button
             onClick={exportUsers}
-            className="flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            className="flex items-center justify-center px-3 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
           >
-            <Download className="w-4 h-4 mr-2" />
+            <Download className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Export
           </button>
           <button
             onClick={() => window.location.reload()}
-            className="flex items-center px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
+            className="flex items-center justify-center px-3 py-2 text-xs sm:text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700"
           >
-            <RefreshCw className="w-4 h-4 mr-2" />
+            <RefreshCw className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
             Refresh
           </button>
         </div>
       </div>
 
       {/* Filters and Search */}
-      <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1 relative">
+      <div className="space-y-3">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            placeholder="Search users by name or email..."
+            placeholder="Search users..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
+            className="w-full pl-10 pr-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-black"
           />
         </div>
-        <div className="flex items-center space-x-3">
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'blocked')}
-              className="pl-10 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none bg-white text-black"
+        {/* Custom Status Filter Dropdown */}
+        <div className="relative overflow-visible users-dropdown-container" ref={statusDropdownRef}>
+          <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 z-10" />
+          <button
+            onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+            className="w-full sm:w-48 pl-10 pr-10 py-3 text-base sm:text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-black cursor-pointer text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+            style={{ fontSize: '16px' }}
+          >
+            <span className="truncate">
+              {filterStatus === 'all' ? 'All Users' :
+               filterStatus === 'active' ? 'Active' :
+               filterStatus === 'blocked' ? 'Blocked' : 'All Users'}
+            </span>
+            <svg 
+              className={`w-4 h-4 transition-transform duration-200 flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
             >
-              <option value="all">All Users</option>
-              <option value="active">Active</option>
-              <option value="blocked">Blocked</option>
-            </select>
-          </div>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          
+          {showStatusDropdown && (
+            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-50 max-h-60 overflow-y-auto users-dropdown">
+              {[
+                { value: 'all', label: 'All Users' },
+                { value: 'active', label: 'Active' },
+                { value: 'blocked', label: 'Blocked' }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => {
+                    setFilterStatus(option.value as 'all' | 'active' | 'blocked');
+                    setShowStatusDropdown(false);
+                  }}
+                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors text-sm ${
+                    filterStatus === option.value ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                  }`}
+                  style={{ fontSize: '16px' }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Bulk Actions */}
       {selectedUsers.length > 0 && (
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-blue-900">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="space-y-3">
+            <div className="text-sm font-medium text-blue-900 text-center sm:text-left">
               {selectedUsers.length} user(s) selected
-            </span>
-            <div className="flex items-center space-x-2">
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <button
                 onClick={() => handleBulkAction('block')}
-                className="px-3 py-1 text-xs font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200"
+                className="px-3 py-2 text-xs font-medium text-orange-700 bg-orange-100 rounded hover:bg-orange-200"
               >
-                Block
+                Block Selected
               </button>
               <button
                 onClick={() => handleBulkAction('unblock')}
-                className="px-3 py-1 text-xs font-medium text-green-700 bg-green-100 rounded hover:bg-green-200"
+                className="px-3 py-2 text-xs font-medium text-green-700 bg-green-100 rounded hover:bg-green-200"
               >
-                Unblock
+                Unblock Selected
               </button>
               <button
                 onClick={() => handleBulkAction('delete')}
-                className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200"
+                className="px-3 py-2 text-xs font-medium text-red-700 bg-red-100 rounded hover:bg-red-200"
               >
-                Delete
+                Delete Selected
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Users Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      {/* Users Table - Desktop View */}
+      <div className="hidden md:block bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
@@ -505,56 +647,145 @@ export default function UserManagement() {
         )}
       </div>
 
+      {/* Mobile Card View */}
+      <div className="md:hidden space-y-3">
+        {currentUsers.map((user) => (
+          <div key={user.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+            {/* Header with checkbox, avatar, name, and actions */}
+            <div className="flex items-center justify-between mb-3 max-w-md mx-auto">
+              <div className="flex items-center space-x-2 w-full">
+                <input
+                  type="checkbox"
+                  checked={selectedUsers.includes(user.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedUsers([...selectedUsers, user.id]);
+                    } else {
+                      setSelectedUsers(selectedUsers.filter(id => id !== user.id));
+                    }
+                  }}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                  <User className="w-4 h-4 text-gray-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-gray-900 truncate">{user.name}</div>
+                  <div className="text-xs text-gray-500 truncate">{user.email}</div>
+                </div>
+              </div>
+              <div className="flex items-center space-x-1">
+                <button
+                  onClick={() => {
+                    // TODO: Implement user details modal
+                    console.log('View user details for:', user.id);
+                  }}
+                  className="p-1.5 text-gray-400 hover:text-blue-600 rounded"
+                  title="View Details"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+                {user.role !== 'ADMIN' && (
+                  <button
+                    onClick={() => handleBlockUser(user.id)}
+                    className={`p-1.5 rounded ${
+                      user.isBlocked 
+                        ? 'text-gray-400 hover:text-green-600' 
+                        : 'text-gray-400 hover:text-orange-600'
+                    }`}
+                    title={user.isBlocked ? 'Unblock User' : 'Block User'}
+                  >
+                    {user.isBlocked ? <Shield className="w-4 h-4" /> : <ShieldOff className="w-4 h-4" />}
+                  </button>
+                )}
+                <button
+                  onClick={() => handleDeleteUser(user.id)}
+                  className="p-1.5 text-gray-400 hover:text-red-600 rounded"
+                  title="Delete User"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+            
+            {/* User details - stacked vertically for mobile */}
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Role:</span>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  user.role === 'ADMIN' 
+                    ? 'bg-purple-100 text-purple-800' 
+                    : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {user.role === 'ADMIN' && <Shield className="w-3 h-3 mr-1" />}
+                  {user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Status:</span>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                  user.isBlocked 
+                    ? 'bg-red-100 text-red-800' 
+                    : 'bg-green-100 text-green-800'
+                }`}>
+                  {user.isBlocked ? 'Blocked' : 'Active'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Conversions:</span>
+                <span className="font-medium">{user.totalConversions.toLocaleString()}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-500">Last Login:</span>
+                <span>{user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        {currentUsers.length === 0 && (
+          <div className="text-center py-12 bg-white rounded-lg shadow-sm border border-gray-200">
+            <User className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500 text-sm">
+              {filteredUsers.length === 0 
+                ? "No users found matching your criteria" 
+                : "No users on this page"}
+            </p>
+          </div>
+        )}
+      </div>
+
       {/* Pagination */}
       {filteredUsers.length > 0 && (
-        <div className="flex items-center justify-between">
-          <div className="text-sm text-gray-700">
+        <div className="space-y-3">
+          <div className="text-xs sm:text-sm text-gray-700 text-center sm:text-left">
             Showing {indexOfFirstUser + 1} to {Math.min(indexOfLastUser, filteredUsers.length)} of {filteredUsers.length} users
           </div>
-          <div className="flex items-center space-x-2">
-            <button 
-              onClick={handlePrevious}
-              disabled={currentPage === 1}
-              className={`px-3 py-2 text-sm font-medium border rounded-md ${
-                currentPage === 1
-                  ? 'text-gray-300 bg-gray-100 border-gray-200 cursor-not-allowed'
-                  : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Previous
-            </button>
-            
-            {/* Page numbers */}
+          <div className="flex items-center justify-center sm:justify-end">
             <div className="flex items-center space-x-1">
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
-                if (totalPages <= 7) {
-                  // Show all pages if 7 or fewer
-                  return (
-                    <button
-                      key={page}
-                      onClick={() => handlePageChange(page)}
-                      className={`px-3 py-2 text-sm font-medium border rounded-md ${
-                        page === currentPage
-                          ? 'text-white bg-blue-600 border-blue-600'
-                          : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  );
-                } else {
-                  // Show first, last, current, and nearby pages with ellipsis
-                  const showPage = 
-                    page === 1 || 
-                    page === totalPages || 
-                    (page >= currentPage - 1 && page <= currentPage + 1);
-                  
-                  if (showPage) {
+              <button 
+                onClick={handlePrevious}
+                disabled={currentPage === 1}
+                className={`px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border rounded-md ${
+                  currentPage === 1
+                    ? 'text-gray-300 bg-gray-100 border-gray-200 cursor-not-allowed'
+                    : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <span className="hidden sm:inline">Previous</span>
+                <span className="sm:hidden">Prev</span>
+              </button>
+              
+              {/* Page numbers - simplified for mobile */}
+              <div className="flex items-center space-x-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => {
+                  if (totalPages <= 5) {
+                    // Show all pages if 5 or fewer
                     return (
                       <button
                         key={page}
                         onClick={() => handlePageChange(page)}
-                        className={`px-3 py-2 text-sm font-medium border rounded-md ${
+                        className={`px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border rounded-md ${
                           page === currentPage
                             ? 'text-white bg-blue-600 border-blue-600'
                             : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
@@ -563,32 +794,56 @@ export default function UserManagement() {
                         {page}
                       </button>
                     );
-                  } else if (page === currentPage - 2 || page === currentPage + 2) {
-                    return (
-                      <span key={page} className="px-2 py-2 text-sm text-gray-400">
-                        ...
-                      </span>
-                    );
+                  } else {
+                    // Show first, last, current, and nearby pages with ellipsis
+                    const showPage = 
+                      page === 1 || 
+                      page === totalPages || 
+                      (page >= currentPage - 1 && page <= currentPage + 1);
+                    
+                    if (showPage) {
+                      return (
+                        <button
+                          key={page}
+                          onClick={() => handlePageChange(page)}
+                          className={`px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border rounded-md ${
+                            page === currentPage
+                              ? 'text-white bg-blue-600 border-blue-600'
+                              : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    } else if (page === currentPage - 2 || page === currentPage + 2) {
+                      return (
+                        <span key={page} className="px-1 sm:px-2 py-2 text-xs sm:text-sm text-gray-400">
+                          ...
+                        </span>
+                      );
+                    }
+                    return null;
                   }
-                  return null;
-                }
-              })}
+                })}
+              </div>
+              
+              <button 
+                onClick={handleNext}
+                disabled={currentPage === totalPages}
+                className={`px-2 sm:px-3 py-2 text-xs sm:text-sm font-medium border rounded-md ${
+                  currentPage === totalPages
+                    ? 'text-gray-300 bg-gray-100 border-gray-200 cursor-not-allowed'
+                    : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <span className="hidden sm:inline">Next</span>
+                <span className="sm:hidden">Next</span>
+              </button>
             </div>
-            
-            <button 
-              onClick={handleNext}
-              disabled={currentPage === totalPages}
-              className={`px-3 py-2 text-sm font-medium border rounded-md ${
-                currentPage === totalPages
-                  ? 'text-gray-300 bg-gray-100 border-gray-200 cursor-not-allowed'
-                  : 'text-gray-500 bg-white border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              Next
-            </button>
           </div>
         </div>
       )}
     </div>
+    </>
   );
 }
