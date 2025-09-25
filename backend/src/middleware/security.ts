@@ -50,7 +50,7 @@ export const corsOptions = {
       'http://localhost:3001',
       'http://127.0.0.1:3000',
       'http://127.0.0.1:3001',
-      'https://pdf-converter-eight-lilac.vercel.app/',
+      'https://pdf-converter-eight-lilac.vercel.app',
       'file://',              // For local HTML files
       null,
     ];
