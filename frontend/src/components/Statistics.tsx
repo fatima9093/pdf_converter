@@ -194,9 +194,9 @@ export default function Statistics() {
   if (!stats) return null;
 
   // Check if user is not authenticated (all stats are empty/zero)
-  const isUnauthenticated = stats.dailyUploads.length === 0 && 
-    stats.conversionSuccessRate.successful === 0 && 
-    stats.conversionSuccessRate.failed === 0;
+  // const isUnauthenticated = stats.dailyUploads.length === 0 && 
+  //   stats.conversionSuccessRate.successful === 0 && 
+  //   stats.conversionSuccessRate.failed === 0;
 
   return (
     <>
@@ -277,11 +277,11 @@ export default function Statistics() {
             <div className="text-center sm:text-left">
               <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">Statistics</h2>
               <p className="text-sm sm:text-base text-gray-600 mt-1">Analytics and insights about your platform</p>
-              {isUnauthenticated && (
+              {/* {isUnauthenticated && (
                 <p className="text-sm text-amber-600 mt-2 p-2 bg-amber-50 rounded-lg">
                   Please log in to view detailed statistics
                 </p>
-              )}
+              )} */}
             </div>
             <div className="flex flex-col space-y-3 sm:space-y-0 sm:flex-row sm:items-center sm:justify-between">
               {/* Custom Time Range Dropdown */}
