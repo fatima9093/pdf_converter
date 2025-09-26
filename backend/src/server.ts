@@ -2576,8 +2576,7 @@ app.post('/api/track-conversion', async (req, res) => {
 });
 
 // Statistics API endpoint (temporarily without auth for testing)
-app.get('/api/statistics', async (req: AuthenticatedRequest, res) => {
-  try {
+app.get('/api/statistics', authenticate, async (req: AuthenticatedRequest, res) => {  try {
     console.log('Statistics API - Processing request for timeRange:', req.query.timeRange);
     const { timeRange = '30d' } = req.query;
     

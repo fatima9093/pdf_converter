@@ -64,6 +64,7 @@ export default function Navbar() {
                 width={240} 
                 height={60}
                 className="h-14 w-auto"
+                unoptimized={true}
                 priority
               />
             </Link>
