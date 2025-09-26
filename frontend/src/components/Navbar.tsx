@@ -59,7 +59,7 @@ export default function Navbar() {
           <div className="flex items-center">
             <Link href="/" className="flex items-center">
               <Image 
-                src="/SIMPLEPDF_TOOL.png" 
+                src="/simplepdf_tool.png" 
                 alt="Simple PDF Tool" 
                 width={240} 
                 height={60}
