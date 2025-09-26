@@ -5,6 +5,11 @@ const nextConfig = {
     NEXT_PUBLIC_EXPRESS_API_URL: process.env.NEXT_PUBLIC_EXPRESS_API_URL || 'http://localhost:3002',
   },
   serverExternalPackages: ['mammoth', 'html-pdf-node', 'puppeteer', 'pdfjs-dist', 'canvas', 'sharp'],
+  images: {
+    formats: ['image/webp', 'image/avif'],
+    unoptimized: true,  
+  },
+
   webpack: (config, { isServer }) => {
     // Handle Node.js modules that aren't compatible with the browser environment
     if (!isServer) {
