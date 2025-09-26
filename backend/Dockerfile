@@ -31,6 +31,9 @@ WORKDIR /app
 # Copy package files first for caching
 COPY package*.json ./
 
+# Copy prisma schema before npm ci to avoid postinstall issues
+COPY prisma/ ./prisma/
+
 # Install ALL dependencies (including dev dependencies for TypeScript compilation)
 RUN npm ci
 
@@ -39,7 +42,6 @@ RUN npm install pdf-poppler --force
 
 # Copy source code
 COPY src/ ./src/
-COPY prisma/ ./prisma/
 COPY ocr-service/ ./ocr-service/
 COPY tsconfig.json ./
 COPY ecosystem.config.js ./
