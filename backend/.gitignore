@@ -130,7 +130,7 @@ out
 .vscode-test
 
 # prisma
-/prisma/migrations/*/migration.sql
+#/prisma/migrations/*/migration.sql
 !prisma/migrations/.gitkeep
 
 # PM2
