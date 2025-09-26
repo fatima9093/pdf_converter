@@ -149,31 +149,10 @@ export async function signup(userData: SignupRequest): Promise<ApiResponse> {
 }
 
 export async function logout(): Promise<ApiResponse> {
-  try {
-    const response = await apiFetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: "include"
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: data.message || 'Logout failed',
-      };
-    }
-
-    return {
-      success: true,
-      data,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: 'Network error occurred',
-    };
-  }
+  return apiCall('/auth/logout', {
+    method: 'POST',
+    credentials: "include"
+  });
 }
 
 // File conversion API calls
