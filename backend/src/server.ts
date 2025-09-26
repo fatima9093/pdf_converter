@@ -2629,21 +2629,26 @@ app.get('/api/statistics', authenticate, async (req: AuthenticatedRequest, res) 
       ((totalUploads - previousPeriodUploads) / previousPeriodUploads) * 100;
 
     // Get daily uploads for the time range
-    const dailyUploads = await prisma.$queryRaw`
-      SELECT 
-        DATE(created_at) as date,
-        COUNT(*) as count
-      FROM conversions 
-      WHERE created_at >= ${startDate}
-      GROUP BY DATE(created_at)
-      ORDER BY date DESC
-      LIMIT 30
-    ` as Array<{ date: Date; count: bigint }>;
+    const dailyUploads = await prisma.conversion.groupBy({
+      by: ['createdAt'],
+      where: {
+        createdAt: {
+          gte: startDate
+        }
+      },
+      _count: {
+        id: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 30
+    });
 
     // Transform daily uploads data
     const transformedDailyUploads = dailyUploads.map(day => ({
-      date: day.date.toISOString().split('T')[0],
-      count: Number(day.count)
+      date: day.createdAt.toISOString().split('T')[0],
+      count: day._count.id
     }));
 
     // Get conversion success rate
@@ -2801,20 +2806,25 @@ app.get('/api/statistics', authenticate, async (req: AuthenticatedRequest, res) 
     }
 
     // Get monthly uploads for trends
-    const monthlyUploads = await prisma.$queryRaw`
-      SELECT 
-        DATE_TRUNC('month', created_at) as month,
-        COUNT(*) as count
-      FROM conversions 
-      WHERE created_at >= ${new Date(now.getFullYear() - 1, now.getMonth(), 1)}
-      GROUP BY DATE_TRUNC('month', created_at)
-      ORDER BY month DESC
-      LIMIT 12
-    ` as Array<{ month: Date; count: bigint }>;
+    const monthlyUploads = await prisma.conversion.groupBy({
+      by: ['createdAt'],
+      where: {
+        createdAt: {
+          gte: new Date(now.getFullYear() - 1, now.getMonth(), 1)
+        }
+      },
+      _count: {
+        id: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 12
+    });
 
     const transformedMonthlyUploads = monthlyUploads.map(month => ({
-      month: month.month.toISOString().slice(0, 7), // YYYY-MM format
-      count: Number(month.count)
+      month: month.createdAt.toISOString().slice(0, 7), // YYYY-MM format
+      count: month._count.id
     }));
 
     const statistics = {
