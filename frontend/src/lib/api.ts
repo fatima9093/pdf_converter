@@ -85,26 +85,95 @@ export async function apiCall<T>(
   }
 }
 
-// Authentication API calls
+// Authentication API calls - FIXED to call Railway backend directly
 export async function login(credentials: LoginRequest): Promise<ApiResponse> {
-  return apiCall('/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(credentials),
-  });
+  try {
+    const response = await apiFetch('/api/auth/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(credentials),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Login failed',
+      };
+    }
+
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Network error occurred',
+    };
+  }
 }
 
 export async function signup(userData: SignupRequest): Promise<ApiResponse> {
-  return apiCall('/auth/signup', {
-    method: 'POST',
-    body: JSON.stringify(userData),
-  });
+  try {
+    const response = await apiFetch('/api/auth/signup', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(userData),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Signup failed',
+      };
+    }
+
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Network error occurred',
+    };
+  }
 }
 
 export async function logout(): Promise<ApiResponse> {
-  return apiCall('/auth/logout', {
-    method: 'POST',
-    credentials: "include"
-  });
+  try {
+    const response = await apiFetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: "include"
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return {
+        success: false,
+        error: data.message || 'Logout failed',
+      };
+    }
+
+    return {
+      success: true,
+      data,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Network error occurred',
+    };
+  }
 }
 
 // File conversion API calls
