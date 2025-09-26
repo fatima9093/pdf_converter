@@ -260,6 +260,16 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(sanitizeInput);
 
+// Health check endpoint
+app.get('/health', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    res.json({ db: 'connected', status: 'ok' });
+  } catch (e) {
+    res.status(500).json({ db: 'disconnected', error: e.message });
+  }
+});
+
 // Authentication routes
 app.use('/api/auth', authRateLimit, authRoutes);
 
