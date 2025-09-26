@@ -241,6 +241,9 @@ function mapConversionStatusToFileStatus(status: string) {
 const app = express();
 const PORT = process.env.PORT || 3002;
 
+// Trust proxy for Railway deployment (handles X-Forwarded-For headers)
+app.set('trust proxy', true);
+
 // Create uploads and temp directories
 const uploadsDir = path.join(__dirname, '../uploads');
 const tempDir = path.join(__dirname, '../temp');
