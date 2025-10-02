@@ -29,6 +29,23 @@ import prisma from './lib/database';
 
 const execAsync = promisify(exec);
 
+// Database health check monitoring
+setInterval(async () => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    console.log('💚 Database health check: OK');
+  } catch (error) {
+    console.error('💔 Database health check failed:', error);
+    // Attempt to reconnect
+    try {
+      await prisma.$connect();
+      console.log('🔄 Database reconnected');
+    } catch (reconnectError) {
+      console.error('❌ Failed to reconnect to database:', reconnectError);
+    }
+  }
+}, 30000); // Check every 30 seconds
+
 // Dynamic import for pdf-poppler (only on non-Linux platforms)
 async function loadPdfPoppler() {
   if (process.platform === 'linux') {
