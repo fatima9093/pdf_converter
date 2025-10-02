@@ -41,23 +41,34 @@ router.post('/signup', validation_1.signupValidation, async (req, res) => {
         // Check if user should be admin (predefined admin emails)
         const adminEmails = ['fatimaahmad9093@gmail.com', 'admin@example.com'];
         const userRole = adminEmails.includes(email.toLowerCase()) ? client_1.Role.ADMIN : client_1.Role.USER;
-        // Create user
-        const user = await database_1.default.user.create({
-            data: {
-                name,
-                email,
-                passwordHash,
-                role: userRole,
-                provider: client_1.Provider.EMAIL,
-            },
-            select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true,
-                createdAt: true,
-            },
-        });
+        // Create user with transaction for better error handling
+        let user;
+        try {
+            user = await database_1.default.user.create({
+                data: {
+                    name,
+                    email,
+                    passwordHash,
+                    role: userRole,
+                    provider: client_1.Provider.EMAIL,
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    email: true,
+                    role: true,
+                    createdAt: true,
+                },
+            });
+        }
+        catch (dbError) {
+            console.error('Database error during signup:', dbError);
+            res.status(503).json({
+                success: false,
+                message: 'Service temporarily unavailable. Please try again.',
+            });
+            return;
+        }
         res.status(201).json({
             success: true,
             message: 'User created successfully',
@@ -126,21 +137,45 @@ router.post('/login', validation_1.loginValidation, async (req, res) => {
             email: user.email,
             role: user.role,
         });
-        // Create session
-        await auth_1.AuthService.createSession(user.id);
+        // Use transaction for database operations to prevent partial updates
+        try {
+            await database_1.default.$transaction(async (tx) => {
+                // Update user's last login time
+                await tx.user.update({
+                    where: { id: user.id },
+                    data: { lastLogin: new Date() },
+                });
+                // Create session
+                await tx.session.create({
+                    data: {
+                        userId: user.id,
+                        refreshToken: refreshToken,
+                        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+                    },
+                });
+            });
+        }
+        catch (dbError) {
+            console.error('Database error during login:', dbError);
+            res.status(503).json({
+                success: false,
+                message: 'Service temporarily unavailable. Please try again.',
+            });
+            return;
+        }
         // Set HTTP-only cookies for secure token storage
         const isProduction = process.env.NODE_ENV === 'production';
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
             secure: isProduction, // Only use HTTPS in production
-            sameSite: isProduction ? 'strict' : 'lax',
+            sameSite: isProduction ? 'none' : 'lax',
             maxAge: 15 * 60 * 1000, // 15 minutes
             path: '/',
         });
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             secure: isProduction,
-            sameSite: isProduction ? 'strict' : 'lax',
+            sameSite: isProduction ? 'none' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
             path: '/',
         });
@@ -240,14 +275,14 @@ router.post('/google', validation_1.googleAuthValidation, async (req, res) => {
         res.cookie('accessToken', accessToken, {
             httpOnly: true,
             secure: isProduction,
-            sameSite: isProduction ? 'strict' : 'lax',
+            sameSite: isProduction ? 'none' : 'lax',
             maxAge: 15 * 60 * 1000, // 15 minutes
             path: '/',
         });
         res.cookie('refreshToken', refreshToken, {
             httpOnly: true,
             secure: isProduction,
-            sameSite: isProduction ? 'strict' : 'lax',
+            sameSite: isProduction ? 'none' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
             path: '/',
         });
@@ -324,14 +359,14 @@ router.post('/refresh-token', async (req, res) => {
         res.cookie('accessToken', newAccessToken, {
             httpOnly: true,
             secure: isProduction,
-            sameSite: isProduction ? 'strict' : 'lax',
+            sameSite: isProduction ? 'none' : 'lax',
             maxAge: 15 * 60 * 1000, // 15 minutes
             path: '/',
         });
         res.cookie('refreshToken', newRefreshToken, {
             httpOnly: true,
             secure: isProduction,
-            sameSite: isProduction ? 'strict' : 'lax',
+            sameSite: isProduction ? 'none' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
             path: '/',
         });
@@ -364,13 +399,13 @@ router.post('/logout', auth_2.authenticate, async (req, res) => {
         res.clearCookie('accessToken', {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
             path: '/',
         });
         res.clearCookie('refreshToken', {
             httpOnly: true,
             secure: process.env.NODE_ENV === 'production',
-            sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
             path: '/',
         });
         res.json({

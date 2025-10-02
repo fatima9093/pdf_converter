@@ -237,6 +237,8 @@ function mapConversionStatusToFileStatus(status) {
 }
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3002;
+// Trust proxy for Railway deployment (handles X-Forwarded-For headers)
+app.set('trust proxy', 1);
 // Create uploads and temp directories
 const uploadsDir = path_1.default.join(__dirname, '../uploads');
 const tempDir = path_1.default.join(__dirname, '../temp');
@@ -250,6 +252,16 @@ app.use((0, cookie_parser_1.default)()); // Parse HTTP-only cookies
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 app.use(security_1.sanitizeInput);
+// Health check endpoint
+app.get('/health', async (req, res) => {
+    try {
+        await database_1.default.$queryRaw `SELECT 1`;
+        res.json({ db: 'connected', status: 'ok' });
+    }
+    catch (e) {
+        res.status(500).json({ db: 'disconnected', error: e.message });
+    }
+});
 // Authentication routes
 app.use('/api/auth', security_1.authRateLimit, auth_1.default);
 // File records routes
@@ -1207,8 +1219,16 @@ app.post('/convert', upload.single('file'), async (req, res) => {
     let inputFilePath;
     let outputFilePath;
     try {
+        console.log('🚀 /convert endpoint hit:', {
+            origin: req.get('Origin'),
+            userAgent: req.get('User-Agent'),
+            method: req.method,
+            hasFile: !!req.file,
+            ip: req.ip
+        });
         // Check if file was uploaded
         if (!req.file) {
+            console.log('❌ No file uploaded');
             return res.status(400).json({
                 success: false,
                 error: 'No file uploaded. Please select a Word, Excel, or PowerPoint file.'
@@ -2257,7 +2277,7 @@ app.post('/api/track-conversion', async (req, res) => {
     }
 });
 // Statistics API endpoint (temporarily without auth for testing)
-app.get('/api/statistics', async (req, res) => {
+app.get('/api/statistics', auth_2.authenticate, async (req, res) => {
     try {
         console.log('Statistics API - Processing request for timeRange:', req.query.timeRange);
         const { timeRange = '30d' } = req.query;
@@ -2304,20 +2324,25 @@ app.get('/api/statistics', async (req, res) => {
         const uploadGrowth = previousPeriodUploads === 0 ? 0 :
             ((totalUploads - previousPeriodUploads) / previousPeriodUploads) * 100;
         // Get daily uploads for the time range
-        const dailyUploads = await database_1.default.$queryRaw `
-      SELECT 
-        DATE(created_at) as date,
-        COUNT(*) as count
-      FROM conversions 
-      WHERE created_at >= ${startDate}
-      GROUP BY DATE(created_at)
-      ORDER BY date DESC
-      LIMIT 30
-    `;
+        const dailyUploads = await database_1.default.conversion.groupBy({
+            by: ['createdAt'],
+            where: {
+                createdAt: {
+                    gte: startDate
+                }
+            },
+            _count: {
+                id: true
+            },
+            orderBy: {
+                createdAt: 'desc'
+            },
+            take: 30
+        });
         // Transform daily uploads data
         const transformedDailyUploads = dailyUploads.map(day => ({
-            date: day.date.toISOString().split('T')[0],
-            count: Number(day.count)
+            date: day.createdAt.toISOString().split('T')[0],
+            count: day._count.id
         }));
         // Get conversion success rate
         const conversionStats = await database_1.default.conversion.groupBy({
@@ -2455,19 +2480,24 @@ app.get('/api/statistics', async (req, res) => {
             mostPopularFileType = allFileTypes[0];
         }
         // Get monthly uploads for trends
-        const monthlyUploads = await database_1.default.$queryRaw `
-      SELECT 
-        DATE_TRUNC('month', created_at) as month,
-        COUNT(*) as count
-      FROM conversions 
-      WHERE created_at >= ${new Date(now.getFullYear() - 1, now.getMonth(), 1)}
-      GROUP BY DATE_TRUNC('month', created_at)
-      ORDER BY month DESC
-      LIMIT 12
-    `;
+        const monthlyUploads = await database_1.default.conversion.groupBy({
+            by: ['createdAt'],
+            where: {
+                createdAt: {
+                    gte: new Date(now.getFullYear() - 1, now.getMonth(), 1)
+                }
+            },
+            _count: {
+                id: true
+            },
+            orderBy: {
+                createdAt: 'desc'
+            },
+            take: 12
+        });
         const transformedMonthlyUploads = monthlyUploads.map(month => ({
-            month: month.month.toISOString().slice(0, 7), // YYYY-MM format
-            count: Number(month.count)
+            month: month.createdAt.toISOString().slice(0, 7), // YYYY-MM format
+            count: month._count.id
         }));
         const statistics = {
             dailyUploads: transformedDailyUploads,

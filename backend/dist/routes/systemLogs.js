@@ -326,39 +326,4 @@ router.get('/admin/logs/stats', auth_1.authenticate, auth_1.adminOnly, async (re
         });
     }
 });
-// Test endpoint to create sample logs (for debugging pagination)
-router.post('/admin/logs/test', auth_1.authenticate, auth_1.adminOnly, async (req, res) => {
-    try {
-        const testLogs = [];
-        // Create 25 test logs with different types and severities
-        for (let i = 1; i <= 25; i++) {
-            const logTypes = ['CONVERSION_ERROR', 'LOGIN_FAILURE', 'SYSTEM_ERROR', 'SECURITY_ALERT', 'USER_ACTION', 'API_ERROR'];
-            const severities = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-            const log = await database_1.default.systemLog.create({
-                data: {
-                    type: logTypes[i % logTypes.length],
-                    message: `Test log message ${i}`,
-                    details: `This is test log details for log number ${i}. It contains some additional information for testing purposes.`,
-                    severity: severities[i % severities.length],
-                    userEmail: i % 3 === 0 ? `testuser${i}@example.com` : null,
-                    ipAddress: `192.168.1.${i % 255}`,
-                    userAgent: `Mozilla/5.0 (Test Browser ${i})`
-                }
-            });
-            testLogs.push(log);
-        }
-        res.json({
-            success: true,
-            message: `Created ${testLogs.length} test logs`,
-            data: { count: testLogs.length }
-        });
-    }
-    catch (error) {
-        console.error('Failed to create test logs:', error);
-        res.status(500).json({
-            success: false,
-            error: 'Failed to create test logs'
-        });
-    }
-});
 exports.default = router;

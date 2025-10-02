@@ -1352,8 +1352,17 @@ app.post('/convert', upload.single('file'), async (req, res) => {
   let outputFilePath: string | undefined;
 
   try {
+    console.log('🚀 /convert endpoint hit:', {
+      origin: req.get('Origin'),
+      userAgent: req.get('User-Agent'),
+      method: req.method,
+      hasFile: !!req.file,
+      ip: req.ip
+    });
+
     // Check if file was uploaded
     if (!req.file) {
+      console.log('❌ No file uploaded');
       return res.status(400).json({
         success: false,
         error: 'No file uploaded. Please select a Word, Excel, or PowerPoint file.'

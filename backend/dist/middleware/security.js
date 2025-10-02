@@ -51,13 +51,23 @@ exports.corsOptions = {
             'http://localhost:3001',
             'http://127.0.0.1:3000',
             'http://127.0.0.1:3001',
+            'http://0.0.0.0:3000',
+            'https://localhost:3000',
+            'https://127.0.0.1:3000',
+            'https://pdf-converter-eight-lilac.vercel.app',
             'file://', // For local HTML files
-            null,
+            null, // For same-origin requests
+            undefined, // For requests without origin header
         ];
+        // Log CORS requests for debugging
+        console.log(`🔍 CORS Request - Origin: ${origin || 'undefined'}`);
         if (!origin || allowedOrigins.includes(origin)) {
+            console.log(`✅ CORS allowed for origin: ${origin || 'undefined'}`);
             callback(null, true);
         }
         else {
+            console.log(`❌ CORS blocked for origin: ${origin}`);
+            console.log(`📋 Allowed origins:`, allowedOrigins);
             callback(new Error('Not allowed by CORS'));
         }
     },
