@@ -55,35 +55,112 @@ export class PDFService {
    */
   static async splitPDFByPages(file: File): Promise<Uint8Array> {
     try {
-      const fileBuffer = await file.arrayBuffer();
-      const pdf = await PDFDocument.load(fileBuffer);
-      const pageCount = pdf.getPageCount();
+      console.log(`📄 Starting PDF split for: ${file.name} (${file.size} bytes)`);
+      console.log(`📄 File type: ${file.type}`);
+      console.log(`📄 File lastModified: ${file.lastModified}`);
       
-      if (pageCount <= 1) {
-        throw new Error('PDF must have more than one page to split');
+      // Validate file size
+      if (file.size === 0) {
+        throw new Error('The uploaded file is empty. Please upload a valid PDF file.');
       }
 
-      const zip = new JSZip();
+      if (file.size > 50 * 1024 * 1024) { // 50MB limit
+        throw new Error('File is too large. Please upload a PDF file smaller than 50MB.');
+      }
+
+      // Basic file type validation
+      if (file.type && !file.type.includes('pdf')) {
+        console.warn(`⚠️ File type ${file.type} may not be a PDF`);
+      }
+
+      const fileBuffer = await file.arrayBuffer();
+      console.log(`📄 File buffer loaded: ${fileBuffer.byteLength} bytes`);
+      
+      let pdf: PDFDocument;
+      try {
+        pdf = await PDFDocument.load(fileBuffer);
+      } catch (loadError) {
+        console.error('❌ PDF load error:', loadError);
+        if (loadError instanceof Error) {
+          if (loadError.message.includes('Invalid PDF')) {
+            throw new Error('The uploaded file is not a valid PDF. Please upload a properly formatted PDF file.');
+          } else if (loadError.message.includes('password') || loadError.message.includes('encrypted')) {
+            throw new Error('This PDF is password-protected. Please remove the password and try again.');
+          } else if (loadError.message.includes('corrupted')) {
+            throw new Error('The PDF file appears to be corrupted. Please try uploading a different PDF file.');
+          }
+        }
+        throw new Error('Failed to load PDF file. Please ensure it is a valid, non-corrupted PDF.');
+      }
+      
+      const pageCount = pdf.getPageCount();
+      console.log(`📄 PDF loaded successfully with ${pageCount} pages`);
+      
+      if (pageCount <= 1) {
+        throw new Error('PDF must have more than one page to split. This PDF only has 1 page.');
+      }
+
+      let zip: JSZip;
+      try {
+        zip = new JSZip();
+      } catch (zipError) {
+        console.error('❌ JSZip creation error:', zipError);
+        throw new Error('Failed to create ZIP file. Please try again.');
+      }
+      
       const baseName = file.name.split('.')[0];
 
       // Create a separate PDF for each page
       for (let i = 0; i < pageCount; i++) {
-        const newPdf = await PDFDocument.create();
-        const [page] = await newPdf.copyPages(pdf, [i]);
-        newPdf.addPage(page);
-        
-        const pdfBytes = await newPdf.save();
-        zip.file(`${baseName}_Page${i + 1}.pdf`, pdfBytes);
+        console.log(`📄 Processing page ${i + 1}/${pageCount}`);
+        try {
+          const newPdf = await PDFDocument.create();
+          const [page] = await newPdf.copyPages(pdf, [i]);
+          newPdf.addPage(page);
+          
+          const pdfBytes = await newPdf.save();
+          zip.file(`${baseName}_Page${i + 1}.pdf`, pdfBytes);
+        } catch (pageError) {
+          console.error(`❌ Error processing page ${i + 1}:`, pageError);
+          throw new Error(`Failed to process page ${i + 1}. The PDF may be corrupted.`);
+        }
       }
 
-      console.log(`Successfully split PDF into ${pageCount} files`);
+      console.log(`✅ Successfully split PDF into ${pageCount} files`);
       
       // Generate ZIP file
-      const zipBytes = await zip.generateAsync({ type: 'uint8array' });
+      let zipBytes: Uint8Array;
+      try {
+        zipBytes = await zip.generateAsync({ type: 'uint8array' });
+        console.log(`✅ ZIP file generated: ${zipBytes.length} bytes`);
+      } catch (zipGenError) {
+        console.error('❌ ZIP generation error:', zipGenError);
+        throw new Error('Failed to generate ZIP file. Please try again.');
+      }
+      
       return zipBytes;
     } catch (error) {
-      console.error('Error splitting PDF:', error);
-      throw new Error('Failed to split PDF. Make sure it\'s a valid PDF file.');
+      console.error('❌ Error splitting PDF:', error);
+      
+      // Provide more specific error messages
+      if (error instanceof Error) {
+        if (error.message.includes('Invalid PDF')) {
+          throw new Error('The uploaded file is not a valid PDF. Please upload a properly formatted PDF file.');
+        } else if (error.message.includes('corrupted')) {
+          throw new Error('The PDF file appears to be corrupted. Please try uploading a different PDF file.');
+        } else if (error.message.includes('password')) {
+          throw new Error('This PDF is password-protected. Please remove the password and try again.');
+        } else if (error.message.includes('empty')) {
+          throw new Error('The uploaded file is empty. Please upload a valid PDF file.');
+        } else if (error.message.includes('too large')) {
+          throw new Error(error.message);
+        } else if (error.message.includes('more than one page')) {
+          throw new Error(error.message);
+        }
+      }
+      
+      // Generic fallback error
+      throw new Error('Failed to split PDF. Please ensure the file is a valid, non-password-protected PDF with multiple pages.');
     }
   }
 

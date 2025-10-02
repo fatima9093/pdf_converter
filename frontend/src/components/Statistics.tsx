@@ -126,6 +126,56 @@ export default function Statistics() {
     fetchStatistics();
   }, [timeRange]);
 
+  // Deduplicate monthly uploads data
+  const getUniqueMonthlyUploads = () => {
+    if (!stats) return [];
+    
+    const monthMap = new Map();
+    stats.monthlyUploads.forEach(month => {
+      if (monthMap.has(month.month)) {
+        // If duplicate month exists, sum the counts
+        const existing = monthMap.get(month.month);
+        monthMap.set(month.month, {
+          ...existing,
+          count: existing.count + month.count
+        });
+      } else {
+        monthMap.set(month.month, month);
+      }
+    });
+    
+    return Array.from(monthMap.values()).sort((a, b) => 
+      new Date(a.month + '-01').getTime() - new Date(b.month + '-01').getTime()
+    );
+  };
+
+  const uniqueMonthlyUploads = getUniqueMonthlyUploads();
+
+  // Deduplicate daily uploads data
+  const getUniqueDailyUploads = () => {
+    if (!stats) return [];
+    
+    const dateMap = new Map();
+    stats.dailyUploads.forEach(day => {
+      if (dateMap.has(day.date)) {
+        // If duplicate date exists, sum the counts
+        const existing = dateMap.get(day.date);
+        dateMap.set(day.date, {
+          ...existing,
+          count: existing.count + day.count
+        });
+      } else {
+        dateMap.set(day.date, day);
+      }
+    });
+    
+    return Array.from(dateMap.values()).sort((a, b) => 
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
+  };
+
+  const uniqueDailyUploads = getUniqueDailyUploads();
+
   // Generate file type data from statistics
   const getFileTypeColor = (index: number) => {
     const colors = [
@@ -150,28 +200,28 @@ export default function Statistics() {
       color: getFileTypeColor(index),
       percentage: fileType.percentage
     })) :
-    (stats ? [
-      { type: stats.mostUploadedFileType.type, count: stats.mostUploadedFileType.count, color: 'bg-blue-500', percentage: stats.mostUploadedFileType.percentage },
-      { type: 'Other Types', count: Math.max(0, stats.dailyUploads.reduce((sum, day) => sum + day.count, 0) - stats.mostUploadedFileType.count), color: 'bg-gray-500', percentage: Math.max(0, 100 - stats.mostUploadedFileType.percentage) }
-    ] : []);
+     (stats ? [
+       { type: stats.mostUploadedFileType.type, count: stats.mostUploadedFileType.count, color: 'bg-blue-500', percentage: stats.mostUploadedFileType.percentage },
+       { type: 'Other Types', count: Math.max(0, uniqueDailyUploads.reduce((sum, day) => sum + day.count, 0) - stats.mostUploadedFileType.count), color: 'bg-gray-500', percentage: Math.max(0, 100 - stats.mostUploadedFileType.percentage) }
+     ] : []);
 
   const exportData = () => {
     if (!stats) return;
 
     const csvContent = [
       'Metric,Value',
-      `Total Uploads (${timeRange}),${stats.dailyUploads.reduce((sum, day) => sum + day.count, 0)}`,
+      `Total Uploads (${timeRange}),${uniqueDailyUploads.reduce((sum, day) => sum + day.count, 0)}`,
       `Most Popular File Type,${stats.mostUploadedFileType.type}`,
       `Conversion Success Rate,${stats.conversionSuccessRate.rate}%`,
       `Storage Used,${stats.totalStorageUsed.formatted}`,
       '',
       'Daily Uploads:',
       'Date,Count',
-      ...stats.dailyUploads.map(day => `${day.date},${day.count}`),
+      ...uniqueDailyUploads.map(day => `${day.date},${day.count}`),
       '',
       'Monthly Uploads:',
       'Month,Count',
-      ...stats.monthlyUploads.map(month => `${month.month},${month.count}`)
+      ...uniqueMonthlyUploads.map(month => `${month.month},${month.count}`)
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -358,9 +408,9 @@ export default function Statistics() {
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
                 <p className="text-xs sm:text-sm font-medium text-gray-600 truncate">Total Uploads</p>
-                <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
-                  {stats.dailyUploads.reduce((sum, day) => sum + day.count, 0).toLocaleString()}
-                </p>
+                 <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900">
+                   {uniqueDailyUploads.reduce((sum, day) => sum + day.count, 0).toLocaleString()}
+                 </p>
               </div>
               <div className="p-2 sm:p-3 bg-blue-100 rounded-lg flex-shrink-0 ml-2">
                 <FileText className="w-4 h-4 sm:w-6 sm:h-6 text-blue-600" />
@@ -461,14 +511,14 @@ export default function Statistics() {
                 <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
                 Daily Uploads
               </h3>
-            </div>
-            <div className="space-y-2 sm:space-y-3">
-              {stats.dailyUploads.map((day) => {
-                const maxCount = Math.max(...stats.dailyUploads.map(d => d.count));
-                const percentage = (day.count / maxCount) * 100;
-                
-                return (
-                  <div key={day.date} className="flex items-center">
+             </div>
+             <div className="space-y-2 sm:space-y-3">
+               {uniqueDailyUploads.map((day, index) => {
+                 const maxCount = Math.max(...uniqueDailyUploads.map(d => d.count));
+                 const percentage = maxCount > 0 ? (day.count / maxCount) * 100 : 0;
+                 
+                 return (
+                   <div key={`${day.date}-${index}`} className="flex items-center">
                     <div className="w-12 sm:w-16 text-xs text-gray-600 flex-shrink-0">
                       {new Date(day.date).toLocaleDateString('en-US', { 
                         month: 'short', 
@@ -537,12 +587,12 @@ export default function Statistics() {
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {stats.monthlyUploads.map((month, index) => {
-              const prevMonth = index > 0 ? stats.monthlyUploads[index - 1] : null;
+            {uniqueMonthlyUploads.map((month, index) => {
+              const prevMonth = index > 0 ? uniqueMonthlyUploads[index - 1] : null;
               const growth = prevMonth ? ((month.count - prevMonth.count) / prevMonth.count) * 100 : 0;
               
               return (
-                <div key={month.month} className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg">
+                <div key={`${month.month}-${index}`} className="text-center p-3 sm:p-4 bg-gray-50 rounded-lg">
                   <p className="text-xs sm:text-sm text-gray-600 mb-1">
                     {new Date(month.month + '-01').toLocaleDateString('en-US', { 
                       month: 'short', 

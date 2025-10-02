@@ -14,6 +14,7 @@ interface FileUploadModalProps {
   tool: Tool | null;
   isOpen: boolean;
   onClose: () => void;
+  asPage?: boolean; // New prop to render as page instead of modal
 }
 
 interface UploadedFile {
@@ -21,7 +22,7 @@ interface UploadedFile {
   id: string;
 }
 
-export default function FileUploadModal({ tool, isOpen, onClose }: FileUploadModalProps) {
+export default function FileUploadModal({ tool, isOpen, onClose, asPage = false }: FileUploadModalProps) {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
@@ -233,10 +234,210 @@ export default function FileUploadModal({ tool, isOpen, onClose }: FileUploadMod
     onClose();
   };
 
-  if (!isOpen || !tool) return null;
+  if (!tool) return null;
+  if (!asPage && !isOpen) return null;
 
   const canProcess = uploadedFiles.length > 0 && (isMultiFileMode ? uploadedFiles.length >= 2 : true);
 
+  // Render as page component (no modal overlay)
+  if (asPage) {
+    return (
+      <div className="bg-white rounded-xl shadow-lg max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{tool.name}</h1>
+            {isMultiFileMode && (
+              <p className="text-sm text-gray-500 mt-1">
+                Upload {tool.maxFiles ? `up to ${tool.maxFiles}` : 'multiple'} PDF files to merge
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          {uploadedFiles.length === 0 && !isCompleted && (
+            <div
+              {...getRootProps()}
+              className={`
+                border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all duration-200
+                ${isDragActive 
+                  ? 'border-[#e5322d] bg-[#e5322d]/5' 
+                  : 'border-gray-300 hover:border-[#e5322d]/50 hover:bg-gray-50'
+                }
+              `}
+            >
+              <input {...getInputProps()} />
+              <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-lg font-medium text-gray-700 mb-2">
+                {isDragActive ? 'Drop your files here' : `Upload your ${isMultiFileMode ? 'files' : 'file'}`}
+              </p>
+              <p className="text-sm text-gray-500 mb-4">
+                Drag and drop or click to select
+              </p>
+              <p className="text-xs text-gray-400">
+                Supported formats: {getAcceptedFileTypesString(tool)}
+                {isMultiFileMode && ` • Max ${maxFiles} files`}
+              </p>
+            </div>
+          )}
+
+          {uploadedFiles.length > 0 && !isCompleted && (
+            <div className="space-y-4">
+              {/* File List */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-medium text-gray-900">
+                    Uploaded Files {isMultiFileMode && `(${uploadedFiles.length}/${maxFiles})`}
+                  </h3>
+                  {isMultiFileMode && uploadedFiles.length < maxFiles && (
+                    <button
+                      {...getRootProps()}
+                      className="text-[#e5322d] hover:text-[#d02823] text-sm font-medium transition-colors duration-200"
+                    >
+                      <input {...getInputProps()} />
+                      + Add More Files
+                    </button>
+                  )}
+                </div>
+
+                {uploadedFiles.map((uploadedFile, index) => (
+                  <div key={uploadedFile.id} className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
+                    <File className="w-8 h-8 text-[#e5322d] flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{uploadedFile.file.name}</p>
+                      <p className="text-sm text-gray-500">
+                        {(uploadedFile.file.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    
+                    {isMultiFileMode && uploadedFiles.length > 1 && (
+                      <div className="flex items-center space-x-1">
+                        <span className="text-xs text-gray-500 bg-gray-200 px-2 py-1 rounded">
+                          {index + 1}
+                        </span>
+                        {index > 0 && (
+                          <button
+                            onClick={() => moveFile(uploadedFile.id, 'up')}
+                            className="p-1 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                            title="Move up"
+                          >
+                            <ArrowUp className="w-4 h-4" />
+                          </button>
+                        )}
+                        {index < uploadedFiles.length - 1 && (
+                          <button
+                            onClick={() => moveFile(uploadedFile.id, 'down')}
+                            className="p-1 text-gray-400 hover:text-gray-600 transition-colors duration-200"
+                            title="Move down"
+                          >
+                            <ArrowDown className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    
+                    <button
+                      onClick={() => removeFile(uploadedFile.id)}
+                      className="p-2 text-red-400 hover:text-red-600 transition-colors duration-200"
+                      title="Remove file"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {isMultiFileMode && uploadedFiles.length >= 2 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <p className="text-blue-700 text-sm">
+                    <strong>Merge Order:</strong> Files will be merged in the order shown above. 
+                    Use the arrow buttons to reorder if needed.
+                  </p>
+                </div>
+              )}
+
+              <button
+                onClick={handleProcess}
+                disabled={isProcessing || !canProcess}
+                className={`
+                  w-full py-3 px-4 rounded-lg font-medium transition-all duration-200
+                  ${isProcessing || !canProcess
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : 'bg-[#e5322d] text-white hover:bg-[#d02823]'
+                  }
+                `}
+              >
+                {isProcessing 
+                  ? 'Processing...' 
+                  : isMultiFileMode 
+                    ? `Merge ${uploadedFiles.length} Files`
+                    : `Convert with ${tool.name}`
+                }
+              </button>
+
+              {isMultiFileMode && uploadedFiles.length < 2 && (
+                <p className="text-center text-sm text-gray-500">
+                  Add at least 2 PDF files to merge them together
+                </p>
+              )}
+
+              <button
+                onClick={resetModal}
+                className="w-full py-2 px-4 text-gray-600 hover:text-gray-800 transition-colors duration-200"
+              >
+                Clear All Files
+              </button>
+            </div>
+          )}
+
+          {isCompleted && (
+            <div className="text-center space-y-4">
+              <div className="flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mx-auto">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">
+                {isMultiFileMode ? 'Files Merged Successfully!' : 'Conversion Complete!'}
+              </h3>
+              <p className="text-gray-600">
+                {isMultiFileMode 
+                  ? `Your ${uploadedFiles.length} PDF files have been merged into one document.`
+                  : 'Your file has been successfully converted.'
+                }
+              </p>
+              
+              <button
+                onClick={handleDownload}
+                className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center justify-center space-x-2"
+              >
+                <Download className="w-5 h-5" />
+                <span>
+                  Download {isMultiFileMode ? 'Merged' : 'Converted'} File
+                </span>
+              </button>
+
+              <button
+                onClick={resetModal}
+                className="w-full py-2 px-4 text-gray-600 hover:text-gray-800 transition-colors duration-200"
+              >
+                {isMultiFileMode ? 'Merge More Files' : 'Convert Another File'}
+              </button>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+              <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Render as modal (original behavior)
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">

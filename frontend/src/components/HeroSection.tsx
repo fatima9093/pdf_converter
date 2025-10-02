@@ -3,13 +3,19 @@
 import { tools } from '@/lib/tools';
 import { Tool } from '@/types';
 import ToolBox from './ToolBox';
-import { useModal } from '@/contexts/ModalContext';
+import { useRouter } from 'next/navigation';
+import { getUrlByToolId } from '@/lib/toolMapping';
+import FeaturesSection from './FeaturesSection';
+import FAQSection from './FAQSection';
 
 export default function HeroSection() {
-  const { openModal } = useModal();
+  const router = useRouter();
 
   const handleToolClick = (tool: Tool) => {
-    openModal(tool);
+    const toolUrl = getUrlByToolId(tool.id);
+    if (toolUrl) {
+      router.push(toolUrl);
+    }
   };
 
   return (
@@ -37,8 +43,13 @@ export default function HeroSection() {
             />
           ))}
         </div>
-
       </div>
+
+      {/* Features Section */}
+      <FeaturesSection />
+
+      {/* FAQ Section */}
+      <FAQSection />
 
     </div>
   );

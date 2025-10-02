@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Eye, EyeOff, Mail, Lock, User, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, ArrowRight, ArrowLeft } from 'lucide-react';
 import { GoogleLogin } from '@react-oauth/google';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -142,6 +142,17 @@ export default function SignupPage() {
         </div>
 
         <div className="bg-white rounded-xl shadow-lg p-8">
+          {/* Back to Tools Button */}
+          <div className="flex justify-start mb-6">
+            <Link 
+              href="/"
+              className="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-600 hover:text-[#2b3d98] transition-colors duration-200"
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Back to Tools
+            </Link>
+          </div>
+
           {/* Google Sign Up */}
           <div className="mb-6">
             <div className="w-full">

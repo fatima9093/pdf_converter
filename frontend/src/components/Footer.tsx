@@ -2,22 +2,12 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { useModal } from '@/contexts/ModalContext';
 import { useCookieConsent } from '@/contexts/CookieConsentContext';
-import { getToolById } from '@/lib/tools';
 import CookieConsentManager from '@/components/CookieConsentManager';
 
 export default function Footer() {
-  const { openModal } = useModal();
   const { consentData } = useCookieConsent();
   const [isCookieManagerOpen, setIsCookieManagerOpen] = useState(false);
-
-  const handleToolClick = (toolId: string) => {
-    const tool = getToolById(toolId);
-    if (tool) {
-      openModal(tool);
-    }
-  };
 
   const handleCookieSettingsClick = () => {
     setIsCookieManagerOpen(true);
@@ -41,28 +31,28 @@ export default function Footer() {
             <h4 className="text-sm font-semibold text-gray-900 mb-4">Tools</h4>
             <ul className="space-y-2">
               <li>
-                <button 
-                  onClick={() => handleToolClick('merge-pdf')}
-                  className="text-gray-600 hover:text-[#2b3d98] text-sm transition-colors text-left"
+                <Link 
+                  href="/tools/merge"
+                  className="text-gray-600 hover:text-[#2b3d98] text-sm transition-colors"
                 >
                   Merge PDF
-                </button>
+                </Link>
               </li>
               <li>
-                <button 
-                  onClick={() => handleToolClick('split-pdf')}
-                  className="text-gray-600 hover:text-[#2b3d98] text-sm transition-colors text-left"
+                <Link 
+                  href="/tools/split"
+                  className="text-gray-600 hover:text-[#2b3d98] text-sm transition-colors"
                 >
                   Split PDF
-                </button>
+                </Link>
               </li>
               <li>
-                <button 
-                  onClick={() => handleToolClick('compress-pdf')}
-                  className="text-gray-600 hover:text-[#2b3d98] text-sm transition-colors text-left"
+                <Link 
+                  href="/tools/compress"
+                  className="text-gray-600 hover:text-[#2b3d98] text-sm transition-colors"
                 >
                   Compress PDF
-                </button>
+                </Link>
               </li>
             </ul>
           </div>

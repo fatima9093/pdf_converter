@@ -157,20 +157,31 @@ export async function POST(request: NextRequest) {
         case 'split-pdf':
           const splitMode = formData.get('splitMode') as string || 'individual';
           
-          if (splitMode === 'ranges') {
-            const pageRangesStr = formData.get('pageRanges') as string;
-            if (!pageRangesStr) {
-              return NextResponse.json(
-                { success: false, error: 'Page ranges are required for custom split' },
-                { status: 400 }
-              );
+          try {
+            if (splitMode === 'ranges') {
+              const pageRangesStr = formData.get('pageRanges') as string;
+              if (!pageRangesStr) {
+                return NextResponse.json(
+                  { success: false, error: 'Page ranges are required for custom split' },
+                  { status: 400 }
+                );
+              }
+              
+              const pageRanges = JSON.parse(pageRangesStr);
+              processedBytes = await PDFService.splitPDFByRanges(file, pageRanges);
+            } else {
+              // Split into individual pages
+              console.log(`📄 API: Starting split operation for ${file.name}`);
+              processedBytes = await PDFService.splitPDFByPages(file);
+              console.log(`📄 API: Split operation completed successfully`);
             }
-            
-            const pageRanges = JSON.parse(pageRangesStr);
-            processedBytes = await PDFService.splitPDFByRanges(file, pageRanges);
-          } else {
-            // Split into individual pages
-            processedBytes = await PDFService.splitPDFByPages(file);
+          } catch (splitError) {
+            console.error('❌ API: Split PDF error:', splitError);
+            const errorMessage = splitError instanceof Error ? splitError.message : 'Failed to split PDF';
+            return NextResponse.json(
+              { success: false, error: errorMessage },
+              { status: 400 }
+            );
           }
           
           // Track the conversion
@@ -179,7 +190,8 @@ export async function POST(request: NextRequest) {
             originalFileName: file.name,
             convertedFileName: `${file.name.split('.')[0]}_split.zip`,
             fileSize: file.size,
-            userId          });
+            userId: undefined // Anonymous user
+          });
           
           // Return as ZIP file
           return new NextResponse(Buffer.from(processedBytes), {

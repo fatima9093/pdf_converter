@@ -417,7 +417,7 @@ export async function trackConversion(params: TrackConversionParams): Promise<vo
     
     // Use appropriate URL based on context
     const baseUrl = isServerSide 
-      ? (process.env.NEXTAUTH_URL || process.env.VERCEL_URL || 'http://localhost:3000')
+      ? (process.env.NEXT_PUBLIC_EXPRESS_API_URL || 'http://localhost:3000')
       : '';
     
     const url = `${baseUrl}/api/track-conversion`;

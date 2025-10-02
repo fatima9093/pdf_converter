@@ -27,6 +27,17 @@ export default function Navbar() {
     setActiveDropdown(activeDropdown === dropdown ? null : dropdown);
   };
 
+  const handleDropdownHover = (dropdown: string) => {
+    setActiveDropdown(dropdown);
+  };
+
+  const handleDropdownLeave = () => {
+    // Add a delay to prevent flickering when moving mouse between button and dropdown
+    setTimeout(() => {
+      setActiveDropdown(null);
+    }, 200);
+  };
+
   const handleToolClick = (url: string, e: React.MouseEvent) => {
     if (shouldOpenModal(url)) {
       e.preventDefault();
@@ -73,7 +84,11 @@ export default function Navbar() {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-8" ref={dropdownRef}>
             {/* Tools Dropdown */}
-            <div className="relative">
+            <div 
+              className="relative"
+              onMouseEnter={() => handleDropdownHover('tools')}
+              onMouseLeave={handleDropdownLeave}
+            >
               <button
                 onClick={() => toggleDropdown('tools')}
                 className="text-gray-700 hover:text-[#2b3d98] transition-colors duration-200 flex items-center space-x-1"
@@ -82,7 +97,14 @@ export default function Navbar() {
                 <ChevronDown className="h-4 w-4" />
               </button>
               {activeDropdown === 'tools' && (
-                <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <>
+                  {/* Invisible bridge to prevent gap issues */}
+                  <div className="absolute top-full left-0 w-full h-1"></div>
+                  <div 
+                    className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+                    onMouseEnter={() => handleDropdownHover('tools')}
+                    onMouseLeave={handleDropdownLeave}
+                  >
                   <Link href="/tools/merge" onClick={(e) => handleToolClick('/tools/merge', e)} className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 hover:text-[#2b3d98] transition-colors">
                     <Merge className="h-4 w-4" />
                     <span>Merge PDF</span>
@@ -95,12 +117,17 @@ export default function Navbar() {
                     <Archive className="h-4 w-4" />
                     <span>Compress PDF</span>
                   </Link>
-                </div>
+                  </div>
+                </>
               )}
             </div>
 
             {/* PDF to Files Dropdown */}
-            <div className="relative">
+            <div 
+              className="relative"
+              onMouseEnter={() => handleDropdownHover('pdf-to-files')}
+              onMouseLeave={handleDropdownLeave}
+            >
               <button
                 onClick={() => toggleDropdown('pdf-to-files')}
                 className="text-gray-700 hover:text-[#2b3d98] transition-colors duration-200 flex items-center space-x-1"
@@ -109,7 +136,14 @@ export default function Navbar() {
                 <ChevronDown className="h-4 w-4" />
               </button>
               {activeDropdown === 'pdf-to-files' && (
-                <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <>
+                  {/* Invisible bridge to prevent gap issues */}
+                  <div className="absolute top-full left-0 w-full h-1"></div>
+                  <div 
+                    className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+                    onMouseEnter={() => handleDropdownHover('pdf-to-files')}
+                    onMouseLeave={handleDropdownLeave}
+                  >
                   <Link href="/convert/pdf-to-word" onClick={(e) => handleToolClick('/convert/pdf-to-word', e)} className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 hover:text-[#2b3d98] transition-colors">
                     <FileText className="h-4 w-4" />
                     <span>PDF to Word</span>
@@ -125,13 +159,18 @@ export default function Navbar() {
                   <Link href="/convert/pdf-to-image" onClick={(e) => handleToolClick('/convert/pdf-to-image', e)} className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 hover:text-[#2b3d98] transition-colors">
                     <FileImage className="h-4 w-4" />
                     <span>PDF to Image</span>
-            </Link>
-                </div>
+                  </Link>
+                  </div>
+                </>
               )}
             </div>
 
             {/* Files to PDF Dropdown */}
-            <div className="relative">
+            <div 
+              className="relative"
+              onMouseEnter={() => handleDropdownHover('files-to-pdf')}
+              onMouseLeave={handleDropdownLeave}
+            >
               <button
                 onClick={() => toggleDropdown('files-to-pdf')}
                 className="text-gray-700 hover:text-[#2b3d98] transition-colors duration-200 flex items-center space-x-1"
@@ -140,7 +179,14 @@ export default function Navbar() {
                 <ChevronDown className="h-4 w-4" />
               </button>
               {activeDropdown === 'files-to-pdf' && (
-                <div className="absolute top-full left-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <>
+                  {/* Invisible bridge to prevent gap issues */}
+                  <div className="absolute top-full left-0 w-full h-1"></div>
+                  <div 
+                    className="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+                    onMouseEnter={() => handleDropdownHover('files-to-pdf')}
+                    onMouseLeave={handleDropdownLeave}
+                  >
                   <Link href="/convert/word-to-pdf" onClick={(e) => handleToolClick('/convert/word-to-pdf', e)} className="flex items-center space-x-2 px-4 py-3 text-gray-700 hover:bg-gray-50 hover:text-[#2b3d98] transition-colors">
                     <FileText className="h-4 w-4" />
                     <span>Word to PDF</span>
@@ -157,7 +203,8 @@ export default function Navbar() {
                     <FileImage className="h-4 w-4" />
                     <span>Image to PDF</span>
                   </Link>
-                </div>
+                  </div>
+                </>
               )}
             </div>
 
@@ -170,7 +217,11 @@ export default function Navbar() {
             <div className="ml-4 pl-4 border-l border-gray-200">
             {isAuthenticated && user ? (
                 <div className="flex items-center space-x-4">
-                  <div className="relative">
+                  <div 
+                    className="relative"
+                    onMouseEnter={() => handleDropdownHover('user')}
+                    onMouseLeave={handleDropdownLeave}
+                  >
                     <button
                       onClick={() => toggleDropdown('user')}
                       className="flex items-center space-x-2 text-gray-700 hover:text-[#2b3d98] transition-colors duration-200"
@@ -180,7 +231,14 @@ export default function Navbar() {
                       <ChevronDown className="h-4 w-4" />
                     </button>
                     {activeDropdown === 'user' && (
-                      <div className="absolute top-full right-0 mt-2 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                      <>
+                        {/* Invisible bridge to prevent gap issues */}
+                        <div className="absolute top-full right-0 w-full h-1"></div>
+                        <div 
+                          className="absolute top-full right-0 mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-50"
+                          onMouseEnter={() => handleDropdownHover('user')}
+                          onMouseLeave={handleDropdownLeave}
+                        >
                         <div className="px-4 py-3 border-b border-gray-200">
                           <p className="text-sm font-medium text-gray-900">{user.name}</p>
                           <p className="text-sm text-gray-500">{user.email}</p>
@@ -206,7 +264,8 @@ export default function Navbar() {
                           <LogOut className="h-4 w-4" />
                           <span>Logout</span>
                         </button>
-                      </div>
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>

@@ -13,9 +13,10 @@ interface CompressPDFModalProps {
   tool: Tool | null;
   isOpen: boolean;
   onClose: () => void;
+  asPage?: boolean; // New prop to render as page instead of modal
 }
 
-export default function CompressPDFModal({ tool, isOpen, onClose }: CompressPDFModalProps) {
+export default function CompressPDFModal({ tool, isOpen, onClose, asPage = false }: CompressPDFModalProps) {
   const { isAuthenticated } = useAuth();
   const router = useRouter();
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -148,8 +149,197 @@ export default function CompressPDFModal({ tool, isOpen, onClose }: CompressPDFM
 
   const spacesSaved = originalSize - compressedSize;
 
-  if (!isOpen || !tool) return null;
+  if (!tool) return null;
+  if (!asPage && !isOpen) return null;
 
+  // Render as page component (no modal overlay)
+  if (asPage) {
+    return (
+      <div className="bg-white rounded-xl shadow-lg max-w-4xl mx-auto">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">{tool.name}</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Compress your PDF files while preserving all content and quality
+            </p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6">
+          {!uploadedFile && !isCompleted && (
+            <div>
+              <div
+                {...getRootProps()}
+                className={`
+                  border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-all duration-200
+                  ${isDragActive 
+                    ? 'border-purple-500 bg-purple-50' 
+                    : 'border-gray-300 hover:border-purple-400 hover:bg-gray-50'
+                  }
+                `}
+              >
+                <input {...getInputProps()} />
+                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-lg font-medium text-gray-700 mb-2">
+                  {isDragActive ? 'Drop your PDF here' : 'Upload your PDF file'}
+                </p>
+                <p className="text-sm text-gray-500 mb-4">
+                  Drag and drop or click to select
+                </p>
+                <p className="text-xs text-gray-400">
+                  Supported formats: {getAcceptedFileTypesString(tool)}
+                </p>
+              </div>
+
+              {/* Lossless Compression Info */}
+              <div className="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <Shield className="w-5 h-5 text-primary mt-0.5 flex-shrink-0" />
+                  <div>
+                    <h3 className="font-medium text-blue-900 mb-2">Lossless Compression</h3>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• Preserves all text, images, and layout</li>
+                      <li>• Removes unnecessary metadata and redundant data</li>
+                      <li>• Optimizes internal PDF structure</li>
+                      <li>• No quality loss or content changes</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {uploadedFile && !isCompleted && (
+            <div className="space-y-6">
+              {/* File Info */}
+              <div className="flex items-center space-x-3 p-4 bg-gray-50 rounded-lg">
+                <File className="w-8 h-8 text-purple-600" />
+                <div className="flex-1">
+                  <p className="font-medium text-gray-900">{uploadedFile.name}</p>
+                  <p className="text-sm text-gray-500">
+                    {formatFileSize(originalSize)}
+                  </p>
+                </div>
+              </div>
+
+              {/* Compression Preview */}
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-6">
+                <div className="text-center">
+                  <div className="flex items-center justify-center space-x-2 mb-4">
+                    <Zap className="w-6 h-6 text-purple-600" />
+                    <h3 className="font-bold text-purple-900 text-lg">Advanced Compression</h3>
+                  </div>
+                  
+                  <div className="bg-white rounded-lg p-4 mb-4">
+                    <p className="text-gray-700 font-medium mb-2">File to optimize:</p>
+                    <p className="text-2xl font-bold text-purple-600">{formatFileSize(originalSize)}</p>
+                    <p className="text-sm text-gray-500 mt-1">Current file size</p>
+                  </div>
+                  
+                  <div className="bg-blue-100 rounded-lg p-4 mb-4">
+                    <h4 className="font-medium text-blue-800 mb-2">Optimization Techniques:</h4>
+                    <ul className="text-sm text-blue-700 text-left space-y-1">
+                      <li>• Remove unnecessary metadata</li>
+                      <li>• Optimize internal PDF structure</li>
+                      <li>• Compress object streams</li>
+                      <li>• Font subsetting and optimization</li>
+                      <li>• Multiple compression strategies</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="bg-green-100 rounded-lg p-3">
+                    <p className="text-green-800 font-medium">
+                      🛡️ Content Protection Guaranteed
+                    </p>
+                    <p className="text-green-700 text-sm mt-1">
+                      All text, images, and layout preserved
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={handleProcess}
+                disabled={isProcessing}
+                className={`
+                  w-full py-4 px-4 rounded-lg font-medium transition-all duration-200 flex items-center justify-center space-x-2
+                  ${isProcessing
+                    ? 'bg-gray-400 text-white cursor-not-allowed'
+                    : 'bg-purple-600 text-white hover:bg-purple-700'
+                  }
+                `}
+              >
+                <Zap className="w-5 h-5" />
+                <span>{isProcessing ? 'Applying Multiple Compression Strategies...' : 'Optimize PDF Size'}</span>
+              </button>
+
+              <button
+                onClick={resetModal}
+                className="w-full py-2 px-4 text-gray-600 hover:text-gray-800 transition-colors duration-200"
+              >
+                Choose Different File
+              </button>
+            </div>
+          )}
+
+          {isCompleted && (
+            <div className="text-center space-y-4">
+              <div className="flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mx-auto">
+                <CheckCircle className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">Compression Complete!</h3>
+              
+              {/* Compression Results */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6">
+                <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                  <div className="text-center">
+                    <p className="text-gray-600">Original Size</p>
+                    <p className="font-bold text-lg">{formatFileSize(originalSize)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-gray-600">Compressed Size</p>
+                    <p className="font-bold text-lg text-green-600">{formatFileSize(compressedSize)}</p>
+                  </div>
+                </div>
+                
+                <div className="text-center">
+                  <p className="text-gray-600 mb-1">Space Saved</p>
+                  <p className="text-2xl font-bold text-green-600">{compressionRatio}%</p>
+                  <p className="text-sm text-gray-500">({formatFileSize(spacesSaved)} saved)</p>
+                </div>
+              </div>
+              
+              <button
+                onClick={handleDownload}
+                className="w-full bg-green-600 text-white py-3 px-4 rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center justify-center space-x-2"
+              >
+                <Download className="w-5 h-5" />
+                <span>Download Compressed PDF</span>
+              </button>
+
+              <button
+                onClick={resetModal}
+                className="w-full py-2 px-4 text-gray-600 hover:text-gray-800 transition-colors duration-200"
+              >
+                Compress Another PDF
+              </button>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-red-600 mt-0.5 flex-shrink-0" />
+              <p className="text-red-700 text-sm">{error}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Render as modal (original behavior)
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
