@@ -6,7 +6,7 @@
   "devCommand": "npm run dev",
   "env": {
     "NEXT_PUBLIC_GOOGLE_CLIENT_ID": "947479351944-nfhl0ulgo0r0qvoktcfj5gj9tcgc0g17.apps.googleusercontent.com",
-    "NEXT_PUBLIC_EXPRESS_API_URL": "@next_public_express_api_url"
+    "NEXT_PUBLIC_EXPRESS_API_URL": "next_public_express_api_url"
   },
   "functions": {
     "src/app/api/**/*.ts": {
