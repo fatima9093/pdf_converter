@@ -2571,6 +2571,18 @@ app.post('/api/track-conversion', async (req, res) => {
 
     console.log(`✅ Tracked conversion: ${toolType} for ${userId ? `user ${userId}` : 'anonymous'}`);
 
+    // Log the conversion event to system logs
+    await logSystemEvent({
+      type: status === 'FAILED' ? 'CONVERSION_ERROR' : 'USER_ACTION',
+      message: status === 'FAILED' 
+        ? `File conversion failed: ${toolType}` 
+        : `File conversion completed: ${toolType}`,
+      details: `File: ${originalFileName}, Size: ${fileSize} bytes, Status: ${status}, Location: ${processingLocation}`,
+      userId,
+      severity: status === 'FAILED' ? 'MEDIUM' : 'LOW',
+      req
+    });
+
     res.json({
       success: true,
       conversionId: conversion.id
@@ -2578,6 +2590,17 @@ app.post('/api/track-conversion', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Failed to track conversion:', error);
+    
+    // Log the tracking error
+    await logSystemEvent({
+      type: 'SYSTEM_ERROR',
+      message: 'Failed to track conversion in database',
+      details: `Tool: ${req.body.toolType}, File: ${req.body.originalFileName}, Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      userId: req.body.userId,
+      severity: 'MEDIUM',
+      req
+    });
+    
     res.status(500).json({
       success: false,
       error: 'Failed to track conversion'
