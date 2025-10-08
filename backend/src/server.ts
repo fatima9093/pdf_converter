@@ -22,7 +22,7 @@ import {
   authRateLimit, 
   generalRateLimit 
 } from './middleware/security';
-import { authenticate, adminOnly } from './middleware/auth';
+import { authenticate, adminOnly, optionalAuthenticate } from './middleware/auth';
 import { AuthenticatedRequest } from './middleware/auth';
 import { AuthService } from './lib/auth';
 import prisma from './lib/database';
@@ -1346,8 +1346,8 @@ app.get('/', (req, res) => {
   });
 });
 
-// Main conversion route (public - no authentication required)
-app.post('/convert', upload.single('file'), async (req, res) => {
+// Main conversion route (public - optional authentication for tracking)
+app.post('/convert', optionalAuthenticate, upload.single('file'), async (req: AuthenticatedRequest, res) => {
   let inputFilePath: string | undefined;
   let outputFilePath: string | undefined;
 
@@ -1357,6 +1357,7 @@ app.post('/convert', upload.single('file'), async (req, res) => {
       userAgent: req.get('User-Agent'),
       method: req.method,
       hasFile: !!req.file,
+      userId: req.user?.userId || 'anonymous',
       ip: req.ip
     });
 
@@ -1391,13 +1392,13 @@ app.post('/convert', upload.single('file'), async (req, res) => {
 
     console.log(`📤 Sending PDF: ${outputFileName} (${pdfBuffer.length} bytes)`);
 
-    // Track conversion (anonymous user)
+    // Track conversion (with user ID if authenticated)
     await trackBackendConversion({
       toolType: 'office-to-pdf',
       originalFileName,
       convertedFileName: outputFileName,
       fileSize: req.file.size,
-      userId: undefined, // Anonymous conversion
+      userId: req.user?.userId, // Use authenticated user ID if available
       status: 'COMPLETED',
       req
     });
@@ -1414,7 +1415,7 @@ app.post('/convert', upload.single('file'), async (req, res) => {
         toolType: 'office-to-pdf',
         originalFileName: req.file.originalname,
         fileSize: req.file.size,
-        userId: undefined, // Anonymous conversion
+        userId: req.user?.userId, // Use authenticated user ID if available
         status: 'FAILED',
         req
       });
@@ -1444,8 +1445,8 @@ app.post('/convert', upload.single('file'), async (req, res) => {
   }
 });
 
-// PDF to JPG conversion route (public - no authentication required)
-app.post('/pdf-to-jpg', upload.single('file'), async (req, res) => {
+// PDF to JPG conversion route (public - optional authentication for tracking)
+app.post('/pdf-to-jpg', optionalAuthenticate, upload.single('file'), async (req: AuthenticatedRequest, res) => {
   let inputFilePath: string | undefined;
   let outputFilePaths: string[] = [];
 
@@ -1470,7 +1471,7 @@ app.post('/pdf-to-jpg', upload.single('file'), async (req, res) => {
       });
     }
     
-    console.log(`📁 Received PDF file: ${originalFileName} (${req.file.size} bytes)`);
+    console.log(`📁 Received PDF file: ${originalFileName} (${req.file.size} bytes) - User: ${req.user?.userId || 'anonymous'}`);
     console.log(`📍 Saved to: ${inputFilePath}`);
 
     // Convert PDF to JPG
@@ -1490,13 +1491,13 @@ app.post('/pdf-to-jpg', upload.single('file'), async (req, res) => {
 
       console.log(`📤 Sending JPG: ${outputFileName} (${jpgBuffer.length} bytes)`);
       
-      // Track conversion (anonymous user)
+      // Track conversion (with user ID if authenticated)
       await trackBackendConversion({
         toolType: 'pdf-to-jpg',
         originalFileName,
         convertedFileName: outputFileName,
         fileSize: req.file.size,
-        userId: undefined, // Anonymous conversion
+        userId: req.user?.userId, // Use authenticated user ID if available
         status: 'COMPLETED',
         req
       });
@@ -1549,13 +1550,13 @@ app.post('/pdf-to-jpg', upload.single('file'), async (req, res) => {
       
       console.log(`📤 Sending ZIP with ${outputFilePaths.length} JPG files: ${outputFileName}`);
       
-      // Track conversion (anonymous user)
+      // Track conversion (with user ID if authenticated)
       await trackBackendConversion({
         toolType: 'pdf-to-jpg',
         originalFileName,
         convertedFileName: outputFileName,
         fileSize: req.file.size,
-        userId: undefined, // Anonymous conversion
+        userId: req.user?.userId, // Use authenticated user ID if available
         status: 'COMPLETED',
         req
       });
@@ -1570,7 +1571,7 @@ app.post('/pdf-to-jpg', upload.single('file'), async (req, res) => {
         toolType: 'pdf-to-jpg',
         originalFileName: req.file.originalname,
         fileSize: req.file.size,
-        userId: undefined, // Anonymous conversion
+        userId: req.user?.userId, // Use authenticated user ID if available
         status: 'FAILED',
         req
       });
@@ -1591,8 +1592,8 @@ app.post('/pdf-to-jpg', upload.single('file'), async (req, res) => {
   }
 });
 
-// PDF to Word conversion route (public - no authentication required)
-app.post('/pdf-to-word', upload.single('file'), async (req, res) => {
+// PDF to Word conversion route (public - optional authentication for tracking)
+app.post('/pdf-to-word', optionalAuthenticate, upload.single('file'), async (req: AuthenticatedRequest, res) => {
   let inputFilePath: string | undefined;
   let outputFilePath: string | undefined;
 
@@ -1617,7 +1618,7 @@ app.post('/pdf-to-word', upload.single('file'), async (req, res) => {
       });
     }
     
-    console.log(`📁 Received PDF file for Word conversion: ${originalFileName} (${req.file.size} bytes)`);
+    console.log(`📁 Received PDF file for Word conversion: ${originalFileName} (${req.file.size} bytes) - User: ${req.user?.userId || 'anonymous'}`);
     console.log(`📍 Saved to: ${inputFilePath}`);
 
     // Convert PDF to Word using intelligent routing
@@ -1635,13 +1636,13 @@ app.post('/pdf-to-word', upload.single('file'), async (req, res) => {
 
     console.log(`📤 Sending Word document: ${outputFileName} (${wordBuffer.length} bytes)`);
 
-    // Track conversion (anonymous user)
+    // Track conversion (with user ID if authenticated)
     await trackBackendConversion({
       toolType: 'pdf-to-word',
       originalFileName,
       convertedFileName: outputFileName,
       fileSize: req.file.size,
-      userId: undefined, // Anonymous conversion
+      userId: req.user?.userId, // Use authenticated user ID if available
       status: 'COMPLETED',
       req
     });
@@ -1658,7 +1659,7 @@ app.post('/pdf-to-word', upload.single('file'), async (req, res) => {
         toolType: 'pdf-to-word',
         originalFileName: req.file.originalname,
         fileSize: req.file.size,
-        userId: undefined, // Anonymous conversion
+        userId: req.user?.userId, // Use authenticated user ID if available
         status: 'FAILED',
         req
       });

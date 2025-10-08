@@ -13,7 +13,14 @@ async function trackConversion(params: {
   status?: 'COMPLETED' | 'FAILED';
 }): Promise<void> {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3002';
+    // Use NEXT_PUBLIC_API_URL which is properly configured for production
+    const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:3002';
+    
+    console.log(`🔄 Tracking conversion to: ${backendUrl}/api/track-conversion`, {
+      toolType: params.toolType,
+      userId: params.userId,
+      status: params.status || 'COMPLETED'
+    });
     
     const response = await fetch(`${backendUrl}/api/track-conversion`, {
       method: 'POST',
@@ -32,12 +39,14 @@ async function trackConversion(params: {
     });
 
     if (response.ok) {
-      console.log('✅ Conversion tracked successfully');
+      const result = await response.json();
+      console.log('✅ Conversion tracked successfully:', result);
     } else {
-      console.warn(`⚠️ Tracking failed: ${response.status}`);
+      const errorText = await response.text();
+      console.warn(`⚠️ Tracking failed: ${response.status} - ${errorText}`);
     }
   } catch (error) {
-    console.warn('⚠️ Failed to track conversion:', error);
+    console.error('⚠️ Failed to track conversion:', error);
   }
 }
 
@@ -190,7 +199,7 @@ export async function POST(request: NextRequest) {
             originalFileName: file.name,
             convertedFileName: `${file.name.split('.')[0]}_split.zip`,
             fileSize: file.size,
-            userId: undefined // Anonymous user
+            userId // Use actual user ID if authenticated
           });
           
           // Return as ZIP file
