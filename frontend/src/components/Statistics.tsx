@@ -51,7 +51,9 @@ export default function Statistics() {
       try {
         setLoading(true);
         
-        const response = await fetch(`/api/statistics?timeRange=${timeRange}`, {
+        // Call backend directly to ensure cookies are sent properly
+        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002';
+        const response = await fetch(`${backendUrl}/api/statistics?timeRange=${timeRange}`, {
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json'
