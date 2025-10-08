@@ -11,21 +11,27 @@ async function trackConversion(params: {
   fileSize: number;
   userId?: string;
   status?: 'COMPLETED' | 'FAILED';
+  request?: NextRequest; // Original request to forward cookies
 }): Promise<void> {
   try {
     // Use NEXT_PUBLIC_API_URL which is properly configured for production
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || process.env.BACKEND_URL || 'http://localhost:3002';
     
+    // Get cookies from original request to forward to backend
+    const cookieHeader = params.request?.headers.get('cookie');
+    
     console.log(`🔄 Tracking conversion to: ${backendUrl}/api/track-conversion`, {
       toolType: params.toolType,
       userId: params.userId,
+      hasCookies: !!cookieHeader,
       status: params.status || 'COMPLETED'
     });
     
     const response = await fetch(`${backendUrl}/api/track-conversion`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        ...(cookieHeader ? { 'Cookie': cookieHeader } : {}) // Forward cookies for authentication
       },
       body: JSON.stringify({
         toolType: params.toolType,
@@ -126,7 +132,8 @@ export async function POST(request: NextRequest) {
         originalFileName: `merged_${files.length}_files`,
         convertedFileName: `merged_${files.length}_files.pdf`,
         fileSize: files.reduce((total, file) => total + file.size, 0),
-        userId      });
+        userId,
+        request      });
       
       return new NextResponse(Buffer.from(mergedPdfBytes), {
         headers: {
@@ -199,7 +206,8 @@ export async function POST(request: NextRequest) {
             originalFileName: file.name,
             convertedFileName: `${file.name.split('.')[0]}_split.zip`,
             fileSize: file.size,
-            userId // Use actual user ID if authenticated
+            userId, // Use actual user ID if authenticated
+            request
           });
           
           // Return as ZIP file
@@ -229,7 +237,9 @@ export async function POST(request: NextRequest) {
             originalFileName: file.name,
             convertedFileName: `compressed_${file.name}`,
             fileSize: file.size,
-            userId          });
+            userId,
+            request
+          });
           break;
           
         case 'jpg-to-pdf':
@@ -241,7 +251,9 @@ export async function POST(request: NextRequest) {
             originalFileName: file.name,
             convertedFileName: `${file.name.split('.')[0]}.pdf`,
             fileSize: file.size,
-            userId          });
+            userId,
+            request
+          });
           break;
           
         case 'word-to-pdf':
@@ -256,7 +268,9 @@ export async function POST(request: NextRequest) {
               originalFileName: file.name,
               convertedFileName: `${file.name.split('.')[0]}.pdf`,
               fileSize: file.size,
-              userId            });
+              userId,
+              request
+            });
           } catch (wordError) {
             console.error('❌ Word to PDF conversion failed:', wordError);
             
@@ -266,7 +280,9 @@ export async function POST(request: NextRequest) {
               originalFileName: file.name,
               fileSize: file.size,
               userId,
-              status: 'FAILED'            });
+              status: 'FAILED',
+              request
+            });
             
             return NextResponse.json(
               { 
@@ -290,7 +306,9 @@ export async function POST(request: NextRequest) {
               originalFileName: file.name,
               convertedFileName: `${file.name.split('.')[0]}.pdf`,
               fileSize: file.size,
-              userId            });
+              userId,
+              request
+            });
           } catch (htmlError) {
             console.error('❌ HTML to PDF conversion failed:', htmlError);
             
@@ -300,7 +318,9 @@ export async function POST(request: NextRequest) {
               originalFileName: file.name,
               fileSize: file.size,
               userId,
-              status: 'FAILED'            });
+              status: 'FAILED',
+              request
+            });
             
             return NextResponse.json(
               { 
@@ -334,7 +354,9 @@ export async function POST(request: NextRequest) {
               originalFileName: file.name,
               convertedFileName: outputFileName,
               fileSize: file.size,
-              userId            });
+              userId,
+              request
+            });
             
             // Single page: return JPG image directly
             if (pageCount === 1) {
@@ -362,7 +384,9 @@ export async function POST(request: NextRequest) {
               originalFileName: file.name,
               fileSize: file.size,
               userId,
-              status: 'FAILED'            });
+              status: 'FAILED',
+              request
+            });
             
             return NextResponse.json(
               { 
@@ -386,7 +410,9 @@ export async function POST(request: NextRequest) {
               originalFileName: file.name,
               convertedFileName: `${file.name.split('.')[0]}.docx`,
               fileSize: file.size,
-              userId            });
+              userId,
+              request
+            });
             
             // Return as Word document
             return new NextResponse(Buffer.from(processedBytes), {
@@ -404,7 +430,9 @@ export async function POST(request: NextRequest) {
               originalFileName: file.name,
               fileSize: file.size,
               userId,
-              status: 'FAILED'            });
+              status: 'FAILED',
+              request
+            });
             
             return NextResponse.json(
               { 
@@ -435,7 +463,9 @@ export async function POST(request: NextRequest) {
         originalFileName: file.name,
         convertedFileName: `converted_${file.name.split('.')[0]}.${tool.outputFormat}`,
         fileSize: file.size,
-        userId      });
+        userId,
+        request
+      });
       
       return new NextResponse(Buffer.from(processedBytes), {
         headers: {
@@ -457,7 +487,9 @@ export async function POST(request: NextRequest) {
             originalFileName: file.name,
             fileSize: file.size,
             userId,
-              status: 'FAILED'            });
+            status: 'FAILED',
+            request
+          });
         }
       }
     } catch (trackingError) {
